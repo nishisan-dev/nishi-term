@@ -30,3 +30,5 @@ __pycache__/
 fixture.json
 known_hosts
 ssh-password
+/NishiTerm-*.tar.gz
+/package/

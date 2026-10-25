@@ -19,3 +19,4 @@
 - Cada aba tem TerminalSession próprio e cópia dos metadados ao abrir. Editar/excluir perfil não altera sessões abertas. Confirmar fechamento durante conexão/sessão; nunca reconectar automaticamente.
 - Aba oculta pausa Poll/processamento, retendo no máximo um frame recebido. Status é o último observado. Preservar ACK após callback, limites e cancelamento ao alternar/fechar abas.
 - Capturas em docs/evidence/product-ui usam bridge simulado, não SSH real nem Windows. A nova UI requer ensaio nativo próprio antes de release.
+- Autorização seguinte: CI GitHub, build Windows/Linux e autenticação por chave SSH com passphrase. Cofre é requisito de produto: desbloqueio com autenticação explícita do usuário sem admin; proteção automática da conta do sistema não equivale a desbloqueio autenticado. Não salvar segredos até implementar e validar esse fluxo. SFTP/métricas continuam fora de escopo.
