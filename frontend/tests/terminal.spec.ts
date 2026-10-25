@@ -586,26 +586,32 @@ test("vault create, explicit save, lock, unlock and use without exposing secrets
   await expect(page.getByRole("dialog")).toContainText("Desbloquear cofre");
   await page.getByRole("button", { name: "Fechar diálogo" }).click();
   await page.getByRole("button", { name: "Conectar", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("cofre bloqueado");
+  await expect(page.getByRole("dialog")).toContainText(
+    "Desbloquear cofre para conectar",
+  );
+  expect(await page.evaluate(() => (window as any).mock.next)).toBe(0);
   await page
-    .getByRole("button", { name: "Desbloquear cofre", exact: true })
+    .getByRole("dialog")
+    .getByRole("button", { name: "Cancelar", exact: true })
     .click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  expect(await page.evaluate(() => (window as any).mock.next)).toBe(0);
+  await page.getByRole("button", { name: "Conectar", exact: true }).click();
+  await page.getByLabel("Senha mestra para conectar").fill("incorrect-master");
   await page
-    .getByLabel("Senha mestra", { exact: true })
-    .fill("incorrect-master");
-  await page.getByRole("button", { name: "Desbloquear", exact: true }).click();
+    .getByRole("button", { name: "Desbloquear e conectar", exact: true })
+    .click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
     "não foi possível desbloquear",
   );
-  await expect(page.getByLabel("Senha mestra", { exact: true })).toHaveValue(
-    "",
-  );
-
+  await expect(page.getByLabel("Senha mestra para conectar")).toHaveValue("");
+  expect(await page.evaluate(() => (window as any).mock.next)).toBe(0);
   await page
-    .getByLabel("Senha mestra", { exact: true })
+    .getByLabel("Senha mestra para conectar")
     .fill("fixture-master-password");
-  await page.getByRole("button", { name: "Desbloquear", exact: true }).click();
-  await page.getByRole("button", { name: "Conectar", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Desbloquear e conectar", exact: true })
+    .click();
   await expect(page.locator(".connection-state")).toHaveText("Conectado");
   expect(await page.evaluate(() => (window as any).mock.auth.hasPassword)).toBe(
     false,

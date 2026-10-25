@@ -29,3 +29,7 @@ Implementação inicial, ainda sem revisão criptográfica independente ou ensai
 Testes automatizados cobrem criptografia sem canários em texto claro, senha incorreta, adulteração, reinício bloqueado, expiração, exclusão, escritor concorrente, arquivo inválido preservado, vinculação ao destino e fluxo de interface. Permanecem gates de distribuição: suspensão real, queda de energia/recuperação, ACLs Windows, auditoria do bridge e do desenho criptográfico.
 
 Referências: [Argon2id em x/crypto](https://pkg.go.dev/golang.org/x/crypto/argon2) e [GCM com nonce aleatório](https://pkg.go.dev/crypto/cipher#NewGCMWithRandomNonce).
+
+## Desbloqueio ao conectar
+
+Ao escolher autenticação pelo cofre e conectar, a interface verifica seu estado. Se trancado, pede a senha mestra no próprio fluxo e continua a tentativa somente após desbloquear. Cancelar não inicia SSH; senha incorreta mantém o diálogo, limpa o campo e permite nova tentativa. Não cria cofre nem salva credenciais automaticamente. Uma corrida com bloqueio posterior ainda é recusada pelo backend.

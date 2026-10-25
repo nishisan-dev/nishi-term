@@ -426,6 +426,12 @@ function SessionPane({
   );
   const [status, setStatus] = useState(initialStatus);
   const [showFiles, setShowFiles] = useState(false);
+  const [unlockForConnection, setUnlockForConnection] = useState(false);
+  const [unlockBusy, setUnlockBusy] = useState(false);
+  const [unlockError, setUnlockError] = useState("");
+  const masterForConnection = useRef<HTMLInputElement>(null);
+  const pendingConnection = useRef<Config | null>(null);
+  const checkingVault = useRef(false);
   const [terminalReady, setTerminalReady] = useState(false);
   const visibility = useRef(visible);
   visibility.current = visible;
@@ -484,11 +490,63 @@ function SessionPane({
     keySecret = "";
     return config;
   }
-  function connect(e: React.FormEvent) {
+  async function connect(e: React.FormEvent) {
     e.preventDefault();
+    if (checkingVault.current || pendingConnection.current) return;
     setCredentialMessage("");
+    const instance = controller.current;
     const c = takeConfig();
-    if (c) void controller.current?.connect(c);
+    if (!c || !instance) return;
+    if (c.authMethod !== "vault") {
+      void instance.connect(c);
+      return;
+    }
+    checkingVault.current = true;
+    try {
+      const vault = await api().VaultStatus();
+      if (controller.current !== instance) return;
+      if (!vault.exists) {
+        setCredentialMessage(
+          "Crie o cofre e salve uma credencial para esta conexão primeiro.",
+        );
+        return;
+      }
+      if (vault.locked) {
+        pendingConnection.current = c;
+        setUnlockError("");
+        setUnlockForConnection(true);
+      } else {
+        void instance.connect(c);
+      }
+    } catch (e) {
+      if (controller.current === instance) setCredentialMessage(message(e));
+    } finally {
+      checkingVault.current = false;
+    }
+  }
+  async function unlockAndConnect(e: React.FormEvent) {
+    e.preventDefault();
+    if (unlockBusy) return;
+    const instance = controller.current;
+    setUnlockBusy(true);
+    setUnlockError("");
+    let secret = masterForConnection.current?.value ?? "";
+    if (masterForConnection.current) masterForConnection.current.value = "";
+    try {
+      const unlocking = api().UnlockVault(secret);
+      secret = "";
+      await unlocking;
+      if (!instance || controller.current !== instance) return;
+      const c = pendingConnection.current;
+      pendingConnection.current = null;
+      setUnlockForConnection(false);
+      if (c) void instance.connect(c);
+    } catch (e) {
+      if (controller.current === instance) setUnlockError(message(e));
+    } finally {
+      secret = "";
+      setUnlockBusy(false);
+    }
   }
   async function saveCredential() {
     if (savingCredential) return;
@@ -519,6 +577,55 @@ function SessionPane({
       aria-labelledby={`tab-${tab.id}`}
       hidden={!visible}
     >
+      {visible && unlockForConnection && (
+        <Modal
+          title="Desbloquear cofre para conectar"
+          onClose={() => {
+            if (unlockBusy) return;
+            pendingConnection.current = null;
+            setUnlockForConnection(false);
+          }}
+        >
+          <p>
+            Digite a senha mestra para conectar a {tab.profile.name} usando a
+            credencial salva.
+          </p>
+          <form onSubmit={unlockAndConnect}>
+            <label>
+              Senha mestra para conectar
+              <input
+                autoFocus
+                ref={masterForConnection}
+                type="password"
+                autoComplete="off"
+                required
+                disabled={unlockBusy}
+              />
+            </label>
+            {unlockError && (
+              <p role="alert" className="error">
+                {unlockError}
+              </p>
+            )}
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="secondary"
+                disabled={unlockBusy}
+                onClick={() => {
+                  pendingConnection.current = null;
+                  setUnlockForConnection(false);
+                }}
+              >
+                Cancelar
+              </button>
+              <button disabled={unlockBusy}>
+                {unlockBusy ? "Desbloqueando…" : "Desbloquear e conectar"}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
       {visible && status.trust && (
         <Modal
           title="Confirmar identidade do servidor"
