@@ -20,3 +20,6 @@
 - Aba oculta pausa Poll/processamento, retendo no máximo um frame recebido. Status é o último observado. Preservar ACK após callback, limites e cancelamento ao alternar/fechar abas.
 - Capturas em docs/evidence/product-ui usam bridge simulado, não SSH real nem Windows. A nova UI requer ensaio nativo próprio antes de release.
 - Autorização seguinte: CI GitHub, build Windows/Linux e autenticação por chave SSH com passphrase. Cofre é requisito de produto: desbloqueio com autenticação explícita do usuário sem admin; proteção automática da conta do sistema não equivale a desbloqueio autenticado. Não salvar segredos até implementar e validar esse fluxo. SFTP/métricas continuam fora de escopo.
+
+- Autorizado: identidades gerenciadas com confirmação explícita na mesma conexão, token por sessão e bloqueio de chave divergente; known_hosts externo opcional/estrito. Nunca aceitar mudança de chave automaticamente. Ver docs/HOST_TRUST.md.
+- Cofre inicial autorizado: somente persistência criptografada em internal/vault, senha mestra explícita sem admin, bloqueio manual/automático e sem API de ler segredos no renderer. A regra anterior de não persistir segredos passa a permitir exclusivamente esse cofre validado; perfis/logs/storage do browser continuam sem segredos. Ver docs/CREDENTIALS.md.

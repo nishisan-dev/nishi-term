@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
-import { api, type Profile } from "./bridge";
+import { createPortal } from "react-dom";
+import { api, type Profile, type Config, type VaultStatus } from "./bridge";
 import { TerminalSession, stateLabels, type SessionStatus } from "./session";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
@@ -75,7 +76,7 @@ function Modal({
     dialog.current?.showModal();
     return () => dialog.current?.close();
   }, []);
-  return (
+  return createPortal(
     <dialog
       ref={dialog}
       aria-labelledby={titleId}
@@ -95,7 +96,8 @@ function Modal({
         </button>
       </div>
       {children}
-    </dialog>
+    </dialog>,
+    document.body,
   );
 }
 function ProfileEditor({
@@ -199,21 +201,26 @@ function ProfileEditor({
               autoComplete="off"
             />
           </label>
-          <label className="wide">
-            Arquivo known_hosts
-            <input
-              required
-              maxLength={4096}
-              value={draft.knownHosts}
-              onChange={(e) => field("knownHosts", e.target.value)}
-              placeholder="C:\Users\voce\.ssh\known_hosts"
-            />
-          </label>
+          <details className="wide" open={draft.knownHosts !== "" || undefined}>
+            <summary>Opções avançadas de identidade</summary>
+            <label>
+              Arquivo known_hosts (opcional)
+              <input
+                maxLength={4096}
+                value={draft.knownHosts}
+                onChange={(e) => field("knownHosts", e.target.value)}
+                placeholder="Vazio: gerenciado pelo NishiTerm"
+              />
+            </label>
+            <p className="hint">
+              Um arquivo externo usa verificação estrita e não permite confirmar
+              identidades desconhecidas pela interface.
+            </p>
+          </details>
         </fieldset>
         <p className="hint">
-          Use um arquivo de identidades de servidores obtido por um canal
-          confiável. Hosts desconhecidos ou com chave divergente serão
-          recusados.
+          Na primeira conexão, confirme a impressão digital do servidor.
+          Mudanças posteriores serão bloqueadas.
         </p>
         {error && (
           <p role="alert" className="error">
@@ -237,6 +244,162 @@ function ProfileEditor({
     </Modal>
   );
 }
+function VaultControls() {
+  const [status, setStatus] = useState<VaultStatus | null>(null),
+    [show, setShow] = useState(false),
+    [busy, setBusy] = useState(false),
+    [error, setError] = useState("");
+  const master = useRef<HTMLInputElement>(null),
+    repeat = useRef<HTMLInputElement>(null);
+  const refresh = useCallback(async () => {
+    try {
+      setStatus(await api().VaultStatus());
+    } catch {
+      setStatus(null);
+    }
+  }, []);
+  useEffect(() => {
+    void refresh();
+    const timer = setInterval(() => void refresh(), 5000);
+    return () => clearInterval(timer);
+  }, [refresh]);
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!status || busy) return;
+    let secret = master.current?.value ?? "";
+    let confirmation = repeat.current?.value ?? "";
+    if (master.current) master.current.value = "";
+    if (repeat.current) repeat.current.value = "";
+    if (!status.exists && secret !== confirmation) {
+      secret = "";
+      confirmation = "";
+      setError("As senhas não coincidem. Digite novamente.");
+      return;
+    }
+    confirmation = "";
+    setBusy(true);
+    setError("");
+    try {
+      const pending = status.exists
+        ? api().UnlockVault(secret)
+        : api().CreateVault(secret);
+      secret = "";
+      await pending;
+      await refresh();
+      setShow(false);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      secret = "";
+      setBusy(false);
+    }
+  }
+  return (
+    <>
+      <button
+        className="secondary"
+        onClick={() => {
+          setError("");
+          setShow(true);
+          void refresh();
+        }}
+      >
+        {!status
+          ? "Cofre indisponível"
+          : !status.exists
+            ? "Criar cofre"
+            : status.locked
+              ? "Desbloquear cofre"
+              : "Cofre desbloqueado"}
+      </button>
+      {show && (
+        <Modal
+          title={
+            !status
+              ? "Cofre indisponível"
+              : !status.exists
+                ? "Criar cofre"
+                : status.locked
+                  ? "Desbloquear cofre"
+                  : "Cofre desbloqueado"
+          }
+          onClose={() => {
+            if (!busy) setShow(false);
+          }}
+        >
+          {!status ? (
+            <p>
+              Não foi possível acessar o cofre. Confira o diretório do usuário e
+              tente novamente.
+            </p>
+          ) : !status.locked ? (
+            <>
+              <p>
+                Credenciais disponíveis para novas conexões. O cofre bloqueia
+                após 5 minutos sem uso de credenciais; sessões SSH abertas
+                continuam funcionando.
+              </p>
+              <button
+                onClick={async () => {
+                  await api().LockVault();
+                  await refresh();
+                }}
+              >
+                Bloquear agora
+              </button>
+            </>
+          ) : (
+            <form className="vault-form" onSubmit={submit}>
+              <p>
+                {status.exists
+                  ? "Informe sua senha mestra para liberar as credenciais neste aplicativo."
+                  : "Crie uma senha mestra com pelo menos 12 caracteres. Ela é independente da senha do sistema e não exige administrador. Se a esquecer, não será possível recuperar as credenciais do cofre."}
+              </p>
+              <label>
+                Senha mestra
+                <input
+                  ref={master}
+                  type="password"
+                  required
+                  minLength={status.exists ? 1 : 12}
+                  maxLength={1024}
+                  autoComplete="off"
+                  disabled={busy}
+                />
+              </label>
+              {!status.exists && (
+                <label>
+                  Confirmar senha mestra
+                  <input
+                    ref={repeat}
+                    type="password"
+                    required
+                    autoComplete="off"
+                    disabled={busy}
+                  />
+                </label>
+              )}
+              {error && (
+                <p className="error" role="alert">
+                  {error}
+                </p>
+              )}
+              <div className="modal-actions">
+                <button disabled={busy}>
+                  {busy
+                    ? "Aguarde…"
+                    : status.exists
+                      ? "Desbloquear"
+                      : "Criar cofre criptografado"}
+                </button>
+              </div>
+            </form>
+          )}
+        </Modal>
+      )}
+    </>
+  );
+}
 function SessionPane({
   tab,
   visible,
@@ -251,8 +414,16 @@ function SessionPane({
     password = useRef<HTMLInputElement>(null),
     passphrase = useRef<HTMLInputElement>(null),
     privateKey = useRef<HTMLInputElement>(null);
-  const [authMethod, setAuthMethod] = useState<"password" | "key">("password");
+  const [authMethod, setAuthMethod] = useState<"password" | "key" | "vault">(
+    "password",
+  );
   const [status, setStatus] = useState(initialStatus);
+  const [savingCredential, setSavingCredential] = useState(false),
+    [credentialMessage, setCredentialMessage] = useState("");
+  const [confirmingTrust, setConfirmingTrust] = useState(false);
+  useEffect(() => {
+    setConfirmingTrust(false);
+  }, [status.trust?.token]);
   const busy = ["connecting", "open", "draining"].includes(status.state);
   useEffect(() => {
     const c = new TerminalSession(mount.current!, (s) => {
@@ -269,15 +440,15 @@ function SessionPane({
   useEffect(() => {
     controller.current?.setVisible(visible);
   }, [visible]);
-  function connect(e: React.FormEvent) {
-    e.preventDefault();
+  function takeConfig(): Config | null {
     const c = controller.current;
-    if (!c) return;
+    if (!c) return null;
     let secret = password.current?.value ?? "";
     let keySecret = passphrase.current?.value ?? "";
     if (passphrase.current) passphrase.current.value = "";
     if (password.current) password.current.value = "";
-    void c.connect({
+    const config: Config = {
+      savedCredential: authMethod === "vault" ? tab.profile.id : "",
       host: tab.profile.host,
       port: tab.profile.port,
       user: tab.profile.user,
@@ -289,9 +460,37 @@ function SessionPane({
       passphrase: authMethod === "key" ? keySecret : "",
       cols: c.terminal.cols,
       rows: c.terminal.rows,
-    });
+    };
     secret = "";
     keySecret = "";
+    return config;
+  }
+  function connect(e: React.FormEvent) {
+    e.preventDefault();
+    setCredentialMessage("");
+    const c = takeConfig();
+    if (c) void controller.current?.connect(c);
+  }
+  async function saveCredential() {
+    if (savingCredential) return;
+    const c = takeConfig();
+    if (!c) return;
+    setSavingCredential(true);
+    setCredentialMessage("");
+    try {
+      const pending = api().SaveCredential(tab.profile.id, c);
+      c.password = "";
+      c.passphrase = "";
+      await pending;
+      setCredentialMessage("Credencial salva no cofre.");
+      setAuthMethod("vault");
+    } catch (e) {
+      setCredentialMessage(message(e));
+    } finally {
+      c.password = "";
+      c.passphrase = "";
+      setSavingCredential(false);
+    }
   }
   return (
     <section
@@ -301,6 +500,44 @@ function SessionPane({
       aria-labelledby={`tab-${tab.id}`}
       hidden={!visible}
     >
+      {visible && status.trust && (
+        <Modal
+          title="Confirmar identidade do servidor"
+          onClose={() => void controller.current?.disconnect()}
+        >
+          <p>
+            Este servidor ainda não é conhecido pelo NishiTerm. Confira a
+            impressão digital por um canal confiável antes de continuar.
+          </p>
+          <p>
+            <strong>{status.trust.endpoint}</strong>
+            <br />
+            {status.trust.algorithm}
+          </p>
+          <code className="fingerprint">{status.trust.fingerprint}</code>
+          <p>
+            A chave será salva neste computador. Se ela mudar, a conexão será
+            bloqueada. Nenhuma credencial de login foi enviada ainda.
+          </p>
+          <div className="modal-actions">
+            <button
+              className="secondary"
+              onClick={() => void controller.current?.disconnect()}
+            >
+              Cancelar conexão
+            </button>
+            <button
+              disabled={confirmingTrust}
+              onClick={() => {
+                setConfirmingTrust(true);
+                void controller.current?.confirmHost(status.trust!.token);
+              }}
+            >
+              Confiar e continuar
+            </button>
+          </div>
+        </Modal>
+      )}
       <div className="session-toolbar">
         <div className="endpoint">
           <Icon name="server" />
@@ -340,14 +577,20 @@ function SessionPane({
               onChange={(e) => {
                 if (password.current) password.current.value = "";
                 if (passphrase.current) passphrase.current.value = "";
-                setAuthMethod(e.target.value as "password" | "key");
+                setAuthMethod(e.target.value as "password" | "key" | "vault");
               }}
             >
               <option value="password">Senha</option>
               <option value="key">Chave SSH</option>
+              <option value="vault">Usar credencial do cofre</option>
             </select>
           </label>
-          {authMethod === "key" ? (
+          {authMethod === "vault" ? (
+            <p>
+              Desbloqueie o cofre na barra lateral para usar a credencial salva
+              desta conexão.
+            </p>
+          ) : authMethod === "key" ? (
             <>
               <label>
                 Arquivo da chave privada
@@ -375,12 +618,43 @@ function SessionPane({
               />
             </label>
           )}
-          <button type="submit">
+          <button type="submit" disabled={savingCredential}>
             Conectar <span aria-hidden="true">→</span>
           </button>
+          <div className="credential-actions">
+            {authMethod !== "vault" ? (
+              <button
+                type="button"
+                className="secondary"
+                disabled={savingCredential}
+                onClick={() => void saveCredential()}
+              >
+                Salvar credencial no cofre
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="secondary"
+                onClick={async () => {
+                  try {
+                    await api().DeleteCredential(tab.profile.id);
+                    setCredentialMessage("Credencial removida.");
+                    setAuthMethod("password");
+                  } catch (e) {
+                    setCredentialMessage(message(e));
+                  }
+                }}
+              >
+                Remover credencial do cofre
+              </button>
+            )}
+            {credentialMessage && <p role="status">{credentialMessage}</p>}
+          </div>
           <p className="trust-note">
             Verificação de identidade:{" "}
-            <span title={tab.profile.knownHosts}>{tab.profile.knownHosts}</span>
+            <span title={tab.profile.knownHosts}>
+              {tab.profile.knownHosts || "Gerenciada pelo NishiTerm"}
+            </span>
           </p>
         </form>
       )}
@@ -601,13 +875,8 @@ function App() {
           ))}
         </div>
         <div className="sidebar-note">
-          <span className="small-line" />
-          <strong>Credenciais temporárias</strong>
-          <p>
-            As senhas não são salvas.
-            <br />
-            Cada conexão pede autenticação.
-          </p>
+          <VaultControls />
+          <p>Salvar credenciais é opcional. O cofre exige sua senha mestra.</p>
         </div>
       </aside>
       <div className="workspace">

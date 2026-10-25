@@ -3,14 +3,22 @@ export type Config = {
   port: number;
   user: string;
   password: string;
-  authMethod?: "password" | "key";
+  authMethod?: "password" | "key" | "vault";
+  savedCredential?: string;
   privateKeyPath?: string;
   passphrase?: string;
   knownHosts: string;
   cols: number;
   rows: number;
 };
+export type HostChallenge = {
+  token: string;
+  endpoint: string;
+  algorithm: string;
+  fingerprint: string;
+};
 export type Frame = {
+  trust?: HostChallenge;
   sequence: number;
   data: string;
   state: string;
@@ -25,10 +33,19 @@ export type Profile = {
   user: string;
   knownHosts: string;
 };
+export type VaultStatus = { exists: boolean; locked: boolean };
 export interface Bridge {
+  VaultStatus(): Promise<VaultStatus>;
+  CreateVault(master: string): Promise<void>;
+  UnlockVault(master: string): Promise<void>;
+  LockVault(): Promise<void>;
+  SaveCredential(id: string, config: Config): Promise<void>;
+  DeleteCredential(id: string): Promise<void>;
+
   ListProfiles(): Promise<Profile[]>;
   SaveProfile(profile: Profile): Promise<Profile[]>;
   DeleteProfile(id: string): Promise<Profile[]>;
+  ConfirmHost(id: string, token: string): Promise<void>;
   Start(config: Config): Promise<string>;
   Poll(id: string, ack: number): Promise<Frame>;
   Input(id: string, data: string): Promise<void>;

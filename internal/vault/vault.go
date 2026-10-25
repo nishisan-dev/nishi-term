@@ -1,0 +1,351 @@
+// Package vault protects credentials at rest with explicit master-password unlock.
+package vault
+
+import (
+	"bytes"
+	"crypto/aes"
+	"crypto/cipher"
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/json"
+	"errors"
+	"golang.org/x/crypto/argon2"
+	"io"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+)
+
+var ErrLocked = errors.New("cofre bloqueado: desbloqueie com sua senha mestra")
+var ErrFile = errors.New("cofre indisponível ou alterado; arquivo preservado, desbloqueie novamente")
+var ErrUnlock = errors.New("não foi possível desbloquear: senha incorreta ou cofre inválido")
+
+const maxSize = 2 << 20
+const idle = 5 * time.Minute
+
+var aad = []byte("NishiTerm vault v1;argon2id:t3:m65536:p1;aes256gcm")
+
+type Credential struct {
+	Host       string `json:"host"`
+	Port       int    `json:"port"`
+	User       string `json:"user"`
+	Method     string `json:"method"`
+	KeyPath    string `json:"keyPath"`
+	Password   string `json:"password"`
+	Passphrase string `json:"passphrase"`
+}
+type envelope struct {
+	Version int    `json:"version"`
+	Salt    []byte `json:"salt"`
+	Data    []byte `json:"data"`
+}
+type Status struct {
+	Exists bool `json:"exists"`
+	Locked bool `json:"locked"`
+}
+type Store struct {
+	mu        sync.Mutex
+	path      string
+	key, salt []byte
+	entries   map[string]Credential
+	digest    [32]byte
+	expires   int64
+	retry     time.Time
+	timer     *time.Timer
+	epoch     uint64
+}
+
+func New(path string) *Store { return &Store{path: path} }
+func (s *Store) lock() {
+	s.epoch++
+	if s.timer != nil {
+		s.timer.Stop()
+	}
+	clear(s.key)
+	s.key = nil
+	s.salt = nil
+	clear(s.entries)
+	s.entries = nil
+	s.expires = 0
+}
+func (s *Store) Lock() { s.mu.Lock(); defer s.mu.Unlock(); s.lock() }
+func (s *Store) expire() {
+	if s.key != nil && time.Now().UnixNano() >= s.expires {
+		s.lock()
+	}
+}
+func (s *Store) touch() {
+	s.epoch++
+	generation := s.epoch
+	s.expires = time.Now().Add(idle).UnixNano()
+	if s.timer != nil {
+		s.timer.Stop()
+	}
+	s.timer = time.AfterFunc(idle, func() {
+		s.mu.Lock()
+		defer s.mu.Unlock()
+		if generation == s.epoch {
+			s.lock()
+		}
+	})
+}
+func (s *Store) Status() (Status, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.expire()
+	st, e := os.Stat(s.path)
+	if os.IsNotExist(e) {
+		s.lock()
+		return Status{Locked: true}, nil
+	}
+	if e != nil || !st.Mode().IsRegular() {
+		return Status{Exists: true, Locked: true}, ErrFile
+	}
+	return Status{Exists: true, Locked: s.key == nil}, nil
+}
+func read(path string) ([]byte, error) {
+	f, e := os.Open(path)
+	if e != nil {
+		return nil, ErrFile
+	}
+	defer f.Close()
+	st, e := f.Stat()
+	if e != nil || !st.Mode().IsRegular() || st.Size() > maxSize {
+		return nil, ErrFile
+	}
+	b, e := io.ReadAll(io.LimitReader(f, maxSize+1))
+	if e != nil || len(b) > maxSize {
+		return nil, ErrFile
+	}
+	return b, nil
+}
+func decode(b []byte, v any) error {
+	d := json.NewDecoder(bytes.NewReader(b))
+	d.DisallowUnknownFields()
+	if d.Decode(v) != nil {
+		return ErrFile
+	}
+	var x any
+	if d.Decode(&x) != io.EOF {
+		return ErrFile
+	}
+	return nil
+}
+func derive(master string, salt []byte) []byte {
+	p := []byte(master)
+	defer clear(p)
+	return argon2.IDKey(p, salt, 3, 64*1024, 1, 32)
+}
+func aead(key []byte) (cipher.AEAD, error) {
+	b, e := aes.NewCipher(key)
+	if e != nil {
+		return nil, e
+	}
+	return cipher.NewGCMWithRandomNonce(b)
+}
+func valid(c Credential) bool {
+	return c.Host != "" && len(c.Host) <= 253 && c.User != "" && len(c.User) <= 256 && c.Port > 0 && c.Port <= 65535 && len(c.Password) <= 65536 && len(c.Passphrase) <= 65536 && len(c.KeyPath) <= 4096 && ((c.Method == "password" && c.KeyPath == "" && c.Passphrase == "") || (c.Method == "key" && c.KeyPath != "" && c.Password == ""))
+}
+func (s *Store) Create(master string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if len(master) < 12 || len(master) > 1024 {
+		return errors.New("use uma senha mestra de 12 a 1024 bytes")
+	}
+	if _, e := os.Stat(s.path); !os.IsNotExist(e) {
+		return errors.New("cofre já existe ou não pode ser criado")
+	}
+	s.lock()
+	salt := make([]byte, 16)
+	if _, e := rand.Read(salt); e != nil {
+		return ErrFile
+	}
+	s.key = derive(master, salt)
+	s.salt = salt
+	s.entries = map[string]Credential{}
+	if e := s.write(s.entries, true); e != nil {
+		s.lock()
+		return e
+	}
+	s.touch()
+	return nil
+}
+func (s *Store) Unlock(master string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if time.Now().Before(s.retry) {
+		return errors.New("aguarde um segundo antes de tentar novamente")
+	}
+	s.lock()
+	s.retry = time.Now().Add(time.Second)
+	if len(master) > 1024 {
+		return ErrUnlock
+	}
+	raw, e := read(s.path)
+	if e != nil {
+		return ErrUnlock
+	}
+	var env envelope
+	if decode(raw, &env) != nil || env.Version != 1 || len(env.Salt) != 16 || len(env.Data) < 28 {
+		return ErrUnlock
+	}
+	key := derive(master, env.Salt)
+	a, e := aead(key)
+	if e != nil {
+		clear(key)
+		return ErrUnlock
+	}
+	plain, e := a.Open(nil, nil, env.Data, aad)
+	if e != nil {
+		clear(key)
+		return ErrUnlock
+	}
+	defer clear(plain)
+	var entries map[string]Credential
+	if decode(plain, &entries) != nil || entries == nil || len(entries) > 200 {
+		clear(key)
+		return ErrUnlock
+	}
+	for id, c := range entries {
+		if id == "" || len(id) > 64 || !valid(c) {
+			clear(key)
+			clear(entries)
+			return ErrUnlock
+		}
+	}
+	s.key = key
+	s.salt = env.Salt
+	s.entries = entries
+	s.digest = sha256.Sum256(raw)
+	s.retry = time.Time{}
+	s.touch()
+	return nil
+}
+func (s *Store) current() error {
+	s.expire()
+	if s.key == nil {
+		return ErrLocked
+	}
+	raw, e := read(s.path)
+	if e != nil || sha256.Sum256(raw) != s.digest {
+		s.lock()
+		return ErrFile
+	}
+	return nil
+}
+
+// Get is backend-only: App never binds this method to the renderer.
+func (s *Store) Get(id string) (Credential, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.current(); e != nil {
+		return Credential{}, e
+	}
+	c, ok := s.entries[id]
+	if !ok {
+		return c, errors.New("nenhuma credencial salva para esta conexão")
+	}
+	s.touch()
+	return c, nil
+}
+func (s *Store) Save(id string, c Credential) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.current(); e != nil {
+		return e
+	}
+	if id == "" || len(id) > 64 || !valid(c) {
+		return errors.New("credencial inválida")
+	}
+	next := make(map[string]Credential, len(s.entries)+1)
+	for k, v := range s.entries {
+		next[k] = v
+	}
+	next[id] = c
+	if len(next) > 200 {
+		return errors.New("limite de credenciais atingido")
+	}
+	if e := s.write(next, false); e != nil {
+		clear(next)
+		return e
+	}
+	clear(s.entries)
+	s.entries = next
+	s.touch()
+	return nil
+}
+func (s *Store) Delete(id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.current(); e != nil {
+		return e
+	}
+	next := make(map[string]Credential, len(s.entries))
+	for k, v := range s.entries {
+		if k != id {
+			next[k] = v
+		}
+	}
+	if e := s.write(next, false); e != nil {
+		clear(next)
+		return e
+	}
+	clear(s.entries)
+	s.entries = next
+	s.touch()
+	return nil
+}
+func (s *Store) write(entries map[string]Credential, create bool) error {
+	if os.MkdirAll(filepath.Dir(s.path), 0700) != nil {
+		return ErrFile
+	}
+	lock, e := os.OpenFile(s.path+".lock", os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0600)
+	if e != nil {
+		return ErrFile
+	}
+	lock.Close()
+	defer os.Remove(s.path + ".lock")
+	if create {
+		if _, e = os.Stat(s.path); !os.IsNotExist(e) {
+			return ErrFile
+		}
+	} else {
+		raw, e := read(s.path)
+		if e != nil || sha256.Sum256(raw) != s.digest {
+			s.lock()
+			return ErrFile
+		}
+	}
+	plain, e := json.Marshal(entries)
+	if e != nil {
+		return ErrFile
+	}
+	defer clear(plain)
+	a, e := aead(s.key)
+	if e != nil {
+		return ErrFile
+	}
+	raw, e := json.Marshal(envelope{Version: 1, Salt: s.salt, Data: a.Seal(nil, nil, plain, aad)})
+	if e != nil || len(raw) > maxSize {
+		return ErrFile
+	}
+	f, e := os.CreateTemp(filepath.Dir(s.path), ".vault-*")
+	if e != nil {
+		return ErrFile
+	}
+	defer os.Remove(f.Name())
+	_, e = f.Write(raw)
+	if e == nil {
+		e = f.Sync()
+	}
+	ce := f.Close()
+	if e != nil || ce != nil {
+		return ErrFile
+	}
+	if os.Rename(f.Name(), s.path) != nil {
+		return ErrFile
+	}
+	s.digest = sha256.Sum256(raw)
+	return nil
+}

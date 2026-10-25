@@ -1,6 +1,6 @@
 import { Terminal } from "@xterm/xterm";
 import { FitAddon } from "@xterm/addon-fit";
-import { api, type Config } from "./bridge";
+import { api, type Config, type HostChallenge } from "./bridge";
 
 export type SessionState =
   | "idle"
@@ -18,6 +18,7 @@ export const stateLabels: Record<SessionState, string> = {
   failed: "Falhou",
 };
 export type SessionStatus = {
+  trust?: HostChallenge;
   state: SessionState;
   error: string;
   cols: number;
@@ -28,6 +29,7 @@ export type SessionStatus = {
 export class TerminalSession {
   readonly terminal: Terminal;
   private fit = new FitAddon();
+  private trust?: HostChallenge;
   private id = "";
   private generation = 0;
   private disposed = false;
@@ -87,6 +89,7 @@ export class TerminalSession {
   private publish() {
     if (this.disposed) return;
     const s = {
+      trust: this.trust,
       state: this.status,
       error: this.error,
       cols: this.terminal.cols,
@@ -214,6 +217,7 @@ export class TerminalSession {
         if (!this.current(gen)) return;
         const frame = await api().Poll(id, ack);
         if (!this.current(gen)) return;
+        this.trust = frame.trust;
         this.status = frame.state as SessionState;
         this.ready = frame.state === "open";
         if (frame.data || !["closed", "failed"].includes(frame.state))
@@ -264,7 +268,18 @@ export class TerminalSession {
       }
     }
   }
+  async confirmHost(token: string) {
+    if (!this.id || this.trust?.token !== token) return;
+    try {
+      await api().ConfirmHost(this.id, token);
+    } catch {
+      await this.fail(
+        "Não foi possível confirmar a identidade. Tente conectar novamente.",
+      );
+    }
+  }
   async disconnect() {
+    this.trust = undefined;
     const gen = ++this.generation;
     this.ready = false;
     this.busy = false;

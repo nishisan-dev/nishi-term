@@ -7,7 +7,7 @@
 | 2 — robustez | Testes com OpenSSH, falhas de rede, carga prolongada, múltiplas sessões, métricas sem conteúdo | Carga 64 MiB/pausa 30 s, rede, cancelamento, 100 ciclos e quatro sessões validados no motor em Windows; longa duração e medição ponta a ponta pendentes (TESTING.md) |
 | 3A — área de trabalho (implementada) | Estrutura visual, perfis/grupos, busca Ctrl+K e quatro abas | Testes locais e crossbuild passaram; ensaio da nova UI no Windows pendente |
 | 3B.1 — CI e chave SSH | Testes/builds GitHub e chave privada com passphrase efêmera | Suítes locais/remotas e builds; ensaio visual nativo separado |
-| 3B.2 — cofre autenticado | Desbloqueio explícito sem admin, bloqueio e armazenamento criptografado; agent futuro | Desenho e testes de CREDENTIALS.md antes de salvar segredos |
+| 3B.2 — identidades e cofre inicial implementados | Desbloqueio explícito sem admin, bloqueio e armazenamento criptografado; agent futuro | Testes automatizados; validação nativa e revisão independente pendentes conforme CREDENTIALS.md |
 | 4 — MVP | Escopo funcional reconciliado com conversa e mockup; avaliar SFTP e métricas; acessibilidade, atalhos e estados | Aceitação funcional e visual; sem expansão especulativa de escopo |
 | 5 — distribuição | Portable, política WebView2, assinatura e pipeline reprodutível | Execução sem admin em máquina limpa e ambiente corporativo; rollback documentado |
 

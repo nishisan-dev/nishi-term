@@ -54,3 +54,9 @@ A conversa completa ainda não foi recuperada. Permanecem a especificar: operaç
 V01–V03 implementados na etapa 3A: tema escuro, árvore de perfis/grupos, busca Ctrl+K, quatro abas e status. Barra lateral recolhível. Grupos derivados dos perfis; busca por nome, grupo, host e usuário. Status não monitora hosts sem conexão e indica pausa nas abas ocultas.
 
 V04–V06 permanecem futuros. Não foram adicionados painéis vazios de SFTP/métricas nem indicadores fictícios de cofre. [Capturas e limites](evidence/product-ui/README.md). DPI e teclado no Windows pendentes para esta UI.
+
+## Identidades gerenciadas e cofre — atualização autorizada
+
+O cadastro usa confirmação de chave na primeira conexão, ligada à mesma sessão, sem autenticação antes do aceite. Chave divergente bloqueia. Caminho known_hosts externo é opcional e mantém modo estrito. Perfis antigos preservam o caminho; limpar em opções avançadas e reabrir aba ativa o gerenciamento. Ver [HOST_TRUST.md](HOST_TRUST.md).
+
+Cofre inicial implementado com senha mestra própria, sem admin, Argon2id/AES-256-GCM, gravação criptografada explícita, bloqueio manual e após 5 minutos sem uso. Perfis não contêm segredos; resolução ocorre no backend com vínculo ao destino. Ver uso, limites e gates pendentes em [CREDENTIALS.md](CREDENTIALS.md). Estas decisões substituem as restrições históricas de senha apenas/arquivo obrigatório/cofre futuro.

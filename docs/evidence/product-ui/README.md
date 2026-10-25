@@ -25,3 +25,11 @@ As capturas foram inspecionadas visualmente. O teste aguarda o ajuste do xterm a
 ![Formulário de chave após falha simulada, sem segredo preenchido](key-auth-fixture.png)
 
 Captura adicional do fluxo de chave com bridge simulado. A mensagem de erro é produzida pela fixture; não é falha de conexão real.
+
+## Confirmação da identidade e criação do cofre
+
+![Identidade simulada](trust-fixture.png)
+
+![Criação do cofre simulado](vault-fixture.png)
+
+Ambas as imagens usam bridge simulado, sem host real ou credencial preenchida.

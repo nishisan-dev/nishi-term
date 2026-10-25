@@ -57,4 +57,10 @@ Cada aba guarda cópia dos metadados; CRUD não altera conexões existentes. A s
 
 ## Autenticação por chave
 
-Config de conexão aceita `authMethod`, `privateKeyPath` e `passphrase`, além da senha. Campos são mutuamente exclusivos e validados no backend; perfis não recebem segredos nem conteúdo de chave. `internal/sshengine/auth.go` lê a chave local e constrói o método SSH; parsing ocorre dentro do trabalhador da sessão, sem bloquear o manager. O arquivo tem limite de 1 MiB; o custo bcrypt OpenSSH também é limitado. Uma tentativa cancelada durante parsing não abre conexão depois. Ver [CREDENTIALS.md](CREDENTIALS.md) para limites e desenho futuro do cofre independente do motor.
+Config de conexão aceita `authMethod`, `privateKeyPath` e `passphrase`, além da senha. Campos são mutuamente exclusivos e validados no backend; perfis não recebem segredos nem conteúdo de chave. `internal/sshengine/auth.go` lê a chave local e constrói o método SSH; parsing ocorre dentro do trabalhador da sessão, sem bloquear o manager. O arquivo tem limite de 1 MiB; o custo bcrypt OpenSSH também é limitado. Uma tentativa cancelada durante parsing não abre conexão depois. Ver [CREDENTIALS.md](CREDENTIALS.md) para limites e desenho do cofre independente do motor.
+
+## Identidades gerenciadas e cofre — atualização autorizada
+
+O cadastro usa confirmação de chave na primeira conexão, ligada à mesma sessão, sem autenticação antes do aceite. Chave divergente bloqueia. Caminho known_hosts externo é opcional e mantém modo estrito. Perfis antigos preservam o caminho; limpar em opções avançadas e reabrir aba ativa o gerenciamento. Ver [HOST_TRUST.md](HOST_TRUST.md).
+
+Cofre inicial implementado com senha mestra própria, sem admin, Argon2id/AES-256-GCM, gravação criptografada explícita, bloqueio manual e após 5 minutos sem uso. Perfis não contêm segredos; resolução ocorre no backend com vínculo ao destino. Ver uso, limites e gates pendentes em [CREDENTIALS.md](CREDENTIALS.md). Estas decisões substituem as restrições históricas de senha apenas/arquivo obrigatório/cofre futuro.

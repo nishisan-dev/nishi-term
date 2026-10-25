@@ -38,7 +38,7 @@ func New(path string) *Store { return &Store{path: path} }
 var errRead = errors.New("não foi possível ler os perfis; o arquivo existente foi preservado")
 
 func validate(p Profile) error {
-	if strings.TrimSpace(p.Name) == "" || len(p.Name) > 100 || len(p.Group) > 100 || strings.TrimSpace(p.Host) == "" || len(p.Host) > 253 || p.Port < 1 || p.Port > 65535 || strings.TrimSpace(p.User) == "" || len(p.User) > 256 || strings.TrimSpace(p.KnownHosts) == "" || len(p.KnownHosts) > 4096 || len(p.ID) > 64 {
+	if strings.TrimSpace(p.Name) == "" || len(p.Name) > 100 || len(p.Group) > 100 || strings.TrimSpace(p.Host) == "" || len(p.Host) > 253 || p.Port < 1 || p.Port > 65535 || strings.TrimSpace(p.User) == "" || len(p.User) > 256 || len(p.KnownHosts) > 4096 || len(p.ID) > 64 {
 		return errors.New("perfil inválido: confira nome, endereço, porta, usuário e known_hosts")
 	}
 	for _, v := range []string{p.ID, p.Name, p.Group, p.Host, p.User, p.KnownHosts} {

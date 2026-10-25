@@ -8,6 +8,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"nishiterm/internal/hosttrust"
 	"os"
 	"strconv"
 	"strings"
@@ -28,29 +29,34 @@ const (
 var ErrClosed = errors.New("sessão inexistente ou encerrada")
 
 type Config struct {
-	Host           string `json:"host"`
-	Port           int    `json:"port"`
-	User           string `json:"user"`
-	Password       string `json:"password"`
-	AuthMethod     string `json:"authMethod"`
-	PrivateKeyPath string `json:"privateKeyPath"`
-	Passphrase     string `json:"passphrase"`
-	KnownHosts     string `json:"knownHosts"`
-	Cols           int    `json:"cols"`
-	Rows           int    `json:"rows"`
+	SavedCredential string `json:"savedCredential"`
+	Host            string `json:"host"`
+	Port            int    `json:"port"`
+	User            string `json:"user"`
+	Password        string `json:"password"`
+	AuthMethod      string `json:"authMethod"`
+	PrivateKeyPath  string `json:"privateKeyPath"`
+	Passphrase      string `json:"passphrase"`
+	KnownHosts      string `json:"knownHosts"`
+	Cols            int    `json:"cols"`
+	Rows            int    `json:"rows"`
 }
 type Frame struct {
-	Sequence uint64 `json:"sequence"`
-	Data     string `json:"data"`
-	State    string `json:"state"`
-	Error    string `json:"error"`
+	Trust    *HostChallenge `json:"trust,omitempty"`
+	Sequence uint64         `json:"sequence"`
+	Data     string         `json:"data"`
+	State    string         `json:"state"`
+	Error    string         `json:"error"`
 }
 type Manager struct {
+	trust    *hosttrust.Store
 	mu       sync.Mutex
 	sessions map[string]*session
 	stopped  bool
 }
 type session struct {
+	trustChallenge     *HostChallenge
+	trustDecision      chan string
 	ctx                context.Context
 	cancel             context.CancelFunc
 	mu                 sync.Mutex
@@ -69,20 +75,26 @@ type session struct {
 func NewManager() *Manager           { return &Manager{sessions: make(map[string]*session)} }
 func dimensions(cols, rows int) bool { return cols > 0 && cols <= 1000 && rows > 0 && rows <= 1000 }
 func (m *Manager) Start(c Config) (string, error) {
-	if len(c.Host) > 253 || len(c.User) > 256 || len(c.Password) > 65536 || len(c.KnownHosts) > 4096 || strings.TrimSpace(c.Host) == "" || strings.ContainsAny(c.Host, "\x00\r\n") || c.Port < 1 || c.Port > 65535 || c.User == "" || c.KnownHosts == "" || !dimensions(c.Cols, c.Rows) {
+	if len(c.Host) > 253 || len(c.User) > 256 || len(c.Password) > 65536 || len(c.KnownHosts) > 4096 || strings.TrimSpace(c.Host) == "" || strings.ContainsAny(c.Host, "\x00\r\n") || c.Port < 1 || c.Port > 65535 || c.User == "" || !dimensions(c.Cols, c.Rows) {
 		return "", errors.New("parâmetros de conexão inválidos")
 	}
-	if (c.AuthMethod != "" && c.AuthMethod != "password" && c.AuthMethod != "key") || len(c.PrivateKeyPath) > 4096 || len(c.Passphrase) > 65536 || strings.ContainsAny(c.PrivateKeyPath, "\x00\r\n") || (c.AuthMethod == "key" && (strings.TrimSpace(c.PrivateKeyPath) == "" || c.Password != "")) || (c.AuthMethod != "key" && (c.PrivateKeyPath != "" || c.Passphrase != "")) {
+	if c.SavedCredential != "" || (c.AuthMethod != "" && c.AuthMethod != "password" && c.AuthMethod != "key") || len(c.PrivateKeyPath) > 4096 || len(c.Passphrase) > 65536 || strings.ContainsAny(c.PrivateKeyPath, "\x00\r\n") || (c.AuthMethod == "key" && (strings.TrimSpace(c.PrivateKeyPath) == "" || c.Password != "")) || (c.AuthMethod != "key" && (c.PrivateKeyPath != "" || c.Passphrase != "")) {
 		return "", errors.New("método de autenticação inválido")
 	}
-	info, err := os.Stat(c.KnownHosts)
-	if err != nil || !info.Mode().IsRegular() || info.Size() > 8*1024*1024 {
-		return "", errors.New("known_hosts deve ser um arquivo regular local de até 8 MiB")
-	}
-	// Build trust policy before any network operation. Do not return paths or parser details to UI.
-	verify, err := knownhosts.New(c.KnownHosts)
-	if err != nil {
-		return "", errors.New("não foi possível ler known_hosts")
+	var verify ssh.HostKeyCallback
+	if c.KnownHosts != "" {
+		info, err := os.Stat(c.KnownHosts)
+		if err != nil || !info.Mode().IsRegular() || info.Size() > 8*1024*1024 {
+			return "", errors.New("known_hosts deve ser um arquivo regular local de até 8 MiB")
+		}
+		// Build trust policy before any network operation. Do not return paths or parser details to UI.
+		verify, err = knownhosts.New(c.KnownHosts)
+		if err != nil {
+			return "", errors.New("não foi possível ler known_hosts")
+		}
+
+	} else if m.trust == nil {
+		return "", errors.New("identidades gerenciadas indisponíveis")
 	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -96,7 +108,7 @@ func (m *Manager) Start(c Config) (string, error) {
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &session{done: make(chan struct{}), ctx: ctx, cancel: cancel, state: "connecting", out: make(chan []byte, QueueSize), input: make(chan []byte, QueueSize)}
 	m.sessions[id] = s
-	go s.run(c, verify)
+	go s.run(c, verify, m.trust)
 	return id, nil
 }
 func (m *Manager) get(id string) (*session, error) {
@@ -182,7 +194,7 @@ func (m *Manager) Poll(id string, ack uint64) (Frame, error) {
 						state = "failed"
 					}
 				}
-				return Frame{Sequence: s.sequence, State: state, Error: msg}, nil
+				return Frame{Sequence: s.sequence, State: state, Error: msg, Trust: s.challenge()}, nil
 			}
 		case <-s.ctx.Done():
 			return Frame{}, ErrClosed
@@ -192,9 +204,9 @@ func (m *Manager) Poll(id string, ack uint64) (Frame, error) {
 	state, msg := s.status()
 	// Do not expose terminal completion until the final output frame has been acknowledged.
 	if s.pending != nil {
-		return Frame{Sequence: s.sequence, Data: base64.StdEncoding.EncodeToString(s.pending), State: state, Error: msg}, nil
+		return Frame{Sequence: s.sequence, Data: base64.StdEncoding.EncodeToString(s.pending), State: state, Error: msg, Trust: s.challenge()}, nil
 	}
-	return Frame{Sequence: s.sequence, State: state, Error: msg}, nil
+	return Frame{Sequence: s.sequence, State: state, Error: msg, Trust: s.challenge()}, nil
 }
 func (m *Manager) Input(id, encoded string) error {
 	if len(encoded) > base64.StdEncoding.EncodedLen(InputSize) {
@@ -247,7 +259,7 @@ func (m *Manager) Resize(id string, cols, rows int) error {
 	}
 	return nil
 }
-func (s *session) run(c Config, verify ssh.HostKeyCallback) {
+func (s *session) run(c Config, verify ssh.HostKeyCallback, trust *hosttrust.Store) {
 	defer close(s.done)
 	defer close(s.out)
 	auth, err := authentication(c)
@@ -274,12 +286,17 @@ func (s *session) run(c Config, verify ssh.HostKeyCallback) {
 	stopWatch := context.AfterFunc(s.ctx, func() { _ = conn.Close() })
 	defer stopWatch()
 	_ = conn.SetDeadline(deadline)
+	if verify == nil {
+		verify = s.managedVerifier(trust, c, conn)
+	}
 	config := &ssh.ClientConfig{User: c.User, Auth: []ssh.AuthMethod{auth}, HostKeyCallback: verify}
 	auth = nil
 	cc, chans, reqs, err := ssh.NewClientConn(conn, net.JoinHostPort(c.Host, strconv.Itoa(c.Port)), config)
 	config.Auth = nil
 	if err != nil {
-		s.fail("handshake SSH recusado: verifique identidade do host, credenciais e rede")
+		if _, msg := s.status(); msg == "" {
+			s.fail("handshake SSH recusado: verifique identidade do host, credenciais e rede")
+		}
 		return
 	}
 	client := ssh.NewClient(cc, chans, reqs)

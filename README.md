@@ -12,7 +12,7 @@ Cliente de terminal SSH desktop em desenvolvimento em Go + Wails v2 estável + R
 - [Validação e limitações](docs/TESTING.md)
 - [Instruções permanentes](AGENTS.md)
 
-O mockup foi recebido e está documentado em [UI_REFERENCE.md](docs/UI_REFERENCE.md). A conversa anexada ainda não disponibilizou seu conteúdo completo. A interface atual inclui perfis agrupados, busca Ctrl+K e quatro abas. Cofre, SFTP e métricas são futuros. Veja o [guia da área de trabalho](docs/PRODUCT_WORKSPACE.md).
+O mockup foi recebido e está documentado em [UI_REFERENCE.md](docs/UI_REFERENCE.md). A conversa anexada ainda não disponibilizou seu conteúdo completo. A interface atual inclui perfis agrupados, busca Ctrl+K e quatro abas. O cofre inicial está disponível; SFTP e métricas são futuros. Veja o [guia da área de trabalho](docs/PRODUCT_WORKSPACE.md).
 
 ## Pré-requisitos
 
@@ -35,11 +35,11 @@ Saída: `build/bin/NishiTerm.exe` (Windows amd64). O script obtém a versão exa
 ## Usar o NishiTerm
 
 1. Copie o executável para uma pasta gravável pelo usuário em Windows com WebView2.
-2. Prepare um arquivo `known_hosts` com a identidade do servidor validada por canal confiável. Para porta diferente de 22, use o formato OpenSSH `[host]:porta`. Não confie apenas no resultado de um scan de rede.
-3. Cadastre uma conexão com nome, grupo, host, porta, usuário e caminho completo do known_hosts. Abra uma aba pela árvore ou busca Ctrl+K, informe a senha e conecte a um servidor de teste que permita senha e PTY.
+2. Na primeira conexão, confira a impressão digital do servidor por um canal confiável e confirme. O NishiTerm salva a identidade e bloqueia mudanças. Arquivo known_hosts externo continua disponível nas opções avançadas.
+3. Cadastre uma conexão com nome, grupo, host, porta, usuário (known_hosts externo é opcional). Abra uma aba pela árvore ou busca Ctrl+K, informe a senha e conecte a um servidor de teste que permita senha e PTY.
 4. Teste teclado, comandos, resize e desconexão. A senha sai do formulário ao conectar e não é salva. Host desconhecido/trocado/revogado é recusado.
 
-Perfis persistem somente metadados. Até quatro abas têm sessões independentes; abas ocultas pausam leitura e retomam ao selecionar. A conexão também aceita arquivo de chave privada com passphrase opcional. Agent, cofre e reconexão automática ainda não estão disponíveis. Colagens acima de 32 KiB ou congestionamento de entrada encerram a sessão com aviso; comandos já enviados não podem ser desfeitos.
+Perfis persistem somente metadados. Até quatro abas têm sessões independentes; abas ocultas pausam leitura e retomam ao selecionar. A conexão também aceita arquivo de chave privada com passphrase opcional. O cofre opcional exige senha mestra e salva somente credenciais criptografadas. Agent e reconexão automática ainda não estão disponíveis. Colagens acima de 32 KiB ou congestionamento de entrada encerram a sessão com aviso; comandos já enviados não podem ser desfeitos.
 
 ## Desenvolvimento e testes
 
@@ -76,3 +76,5 @@ Veja [CONTRIBUTING.md](CONTRIBUTING.md) para contribuir. Relatórios e roteiros 
 ## CI, Linux e chaves SSH
 
 [Testes e builds no GitHub Actions](https://github.com/nishisan-dev/nishi-term/actions/workflows/ci.yml) geram artifacts Windows e Linux após aprovação das suítes. Veja [CI e execução Linux](docs/CI.md). No formulário da aba, selecione **Chave SSH**, informe o caminho local e a passphrase se necessária. O conteúdo da chave fica no backend; não é salvo nos perfis. Veja [formatos, limites e requisito do cofre autenticado](docs/CREDENTIALS.md).
+
+Veja [identidades gerenciadas](docs/HOST_TRUST.md) e [cofre com senha mestra](docs/CREDENTIALS.md). O cofre é uma implementação inicial com testes automatizados; os gates de revisão/validação nativa estão documentados.

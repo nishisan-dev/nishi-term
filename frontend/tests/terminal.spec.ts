@@ -33,6 +33,9 @@ async function bridge(page: Page, mode = "stream") {
         inputs: [] as any[],
         saves: [] as any[],
         next: 0,
+        vault: { exists: false, locked: true },
+        savedCredentials: [] as string[],
+        confirmed: false,
       });
       const sessions: Record<
         string,
@@ -41,6 +44,33 @@ async function bridge(page: Page, mode = "stream") {
       w.go = {
         main: {
           App: {
+            VaultStatus: async () => ({ ...m.vault }),
+            CreateVault: async (_master: string) => {
+              m.vault = { exists: true, locked: false };
+            },
+            UnlockVault: async (_master: string) => {
+              if (_master === "incorrect-master")
+                throw "não foi possível desbloquear";
+              m.vault.locked = false;
+            },
+            LockVault: async () => {
+              m.vault.locked = true;
+            },
+            SaveCredential: async (id: string, c: any) => {
+              m.savedConfig = c;
+              if (m.vault.locked) throw "cofre bloqueado";
+              m.savedCredentials.push(id);
+            },
+            DeleteCredential: async (id: string) => {
+              m.savedCredentials = m.savedCredentials.filter(
+                (x: string) => x !== id,
+              );
+            },
+            ConfirmHost: async (id: string, token: string) => {
+              if (token !== "fixture-token" || sessions[id]?.closed)
+                throw "expired";
+              m.confirmed = true;
+            },
             ListProfiles: async () => m.profiles.map((p: any) => ({ ...p })),
             SaveProfile: async (p: any) => {
               if (m.failSave) throw "Não foi possível salvar os perfis";
@@ -63,6 +93,8 @@ async function bridge(page: Page, mode = "stream") {
                 hasPassphrase: !!c.passphrase,
               };
               m.configRef = c;
+              if (c.authMethod === "vault" && m.vault.locked)
+                throw "cofre bloqueado: desbloqueie com sua senha mestra";
               if (mode === "fail")
                 throw "handshake SSH recusado: verifique identidade do host, credenciais e rede";
               const id = `session-${++m.next}`;
@@ -78,6 +110,19 @@ async function bridge(page: Page, mode = "stream") {
               await new Promise((r) => setTimeout(r, 15));
               const s = sessions[id];
               if (s.closed) throw "sessão encerrada";
+              if (mode === "trust" && !m.confirmed)
+                return {
+                  sequence: 0,
+                  data: "",
+                  state: "connecting",
+                  error: "",
+                  trust: {
+                    token: "fixture-token",
+                    endpoint: `${s.host}:22`,
+                    algorithm: "ssh-ed25519",
+                    fingerprint: "SHA256:fixture-fingerprint",
+                  },
+                };
               if (mode === "fragment") {
                 const chunks = [
                   [79, 108, 195],
@@ -315,7 +360,10 @@ test("create profile handles save failure and records visual fixtures", async ({
   await page.getByLabel("Host", { exact: true }).fill("new.invalid");
   await page.getByLabel("Usuário", { exact: true }).fill("tester");
   await page
-    .getByLabel("Arquivo known_hosts", { exact: true })
+    .getByText("Opções avançadas de identidade", { exact: true })
+    .click();
+  await page
+    .getByLabel("Arquivo known_hosts (opcional)", { exact: true })
     .fill("/trusted/known_hosts");
   await page.screenshot({
     path: path.join(output, "profile-editor-fixture.png"),
@@ -415,4 +463,86 @@ test("key authentication clears passphrase and never saves credentials", async (
   await page.screenshot({
     path: path.resolve("../docs/evidence/product-ui/key-auth-fixture.png"),
   });
+});
+
+test("managed trust requires explicit confirmation and cancel closes attempt", async ({
+  page,
+}) => {
+  await bridge(page, "trust");
+  await page.goto("/");
+  await open(page);
+  const dialog = page.getByRole("dialog", {
+    name: "Confirmar identidade do servidor",
+  });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText("SHA256:fixture-fingerprint");
+  expect(await page.evaluate(() => (window as any).mock.confirmed)).toBe(false);
+  await dialog
+    .getByRole("button", { name: "Cancelar conexão", exact: true })
+    .click();
+  await expect(dialog).not.toBeVisible();
+  expect(await page.evaluate(() => (window as any).mock.closes)).toContain(
+    "session-1",
+  );
+  await page.getByLabel("Senha para Alpha").fill("ephemeral");
+  await page.getByRole("button", { name: "Conectar", exact: true }).click();
+  await expect(dialog).toBeVisible();
+  await page.screenshot({
+    path: path.resolve("../docs/evidence/product-ui/trust-fixture.png"),
+  });
+  await dialog.getByRole("button", { name: "Confiar e continuar" }).click();
+  await expect(dialog).not.toBeVisible();
+  await expect(page.locator(".connection-state")).toHaveText("Conectado");
+});
+
+test("vault create, explicit save, lock, unlock and use without exposing secrets", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Criar cofre", exact: true }).click();
+  await page.screenshot({
+    path: path.resolve("../docs/evidence/product-ui/vault-fixture.png"),
+  });
+  await page
+    .getByLabel("Senha mestra", { exact: true })
+    .fill("fixture-master-password");
+  await page
+    .getByLabel("Confirmar senha mestra")
+    .fill("fixture-master-password");
+  await page.getByRole("button", { name: "Criar cofre criptografado" }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await page.getByRole("button", { name: "Alpha", exact: true }).click();
+  await page.getByLabel("Senha para Alpha").fill("fixture-saved-password");
+  await page
+    .getByRole("button", { name: "Salvar credencial no cofre" })
+    .click();
+  await expect(page.getByLabel("Autenticação", { exact: true })).toHaveValue(
+    "vault",
+  );
+  expect(
+    await page.evaluate(() => (window as any).mock.savedConfig.password),
+  ).toBe("");
+  expect(await page.evaluate(() => (window as any).mock.saves)).toEqual([]);
+  await page
+    .getByRole("button", { name: "Cofre desbloqueado", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Bloquear agora" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Desbloquear cofre");
+  await page.getByRole("button", { name: "Fechar diálogo" }).click();
+  await page.getByRole("button", { name: "Conectar", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("cofre bloqueado");
+  await page
+    .getByRole("button", { name: "Desbloquear cofre", exact: true })
+    .click();
+  await page
+    .getByLabel("Senha mestra", { exact: true })
+    .fill("fixture-master-password");
+  await page.getByRole("button", { name: "Desbloquear", exact: true }).click();
+  await page.getByRole("button", { name: "Conectar", exact: true }).click();
+  await expect(page.locator(".connection-state")).toHaveText("Conectado");
+  expect(await page.evaluate(() => (window as any).mock.auth.hasPassword)).toBe(
+    false,
+  );
+  expect(await page.evaluate(() => localStorage.length)).toBe(0);
 });

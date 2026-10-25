@@ -798,3 +798,32 @@ dialog::backdrop {
   overflow: auto;
   flex-shrink: 0;
 }
+
+.fingerprint {
+  display: block;
+  overflow-wrap: anywhere;
+  padding: 14px;
+  background: #090f18;
+  margin-bottom: 16px;
+}
+details.wide summary {
+  cursor: pointer;
+  margin-bottom: 12px;
+}
+
+.credential-actions {
+  grid-column: 1/-1;
+}
+.credential-actions button {
+  font-size: 12px;
+  padding: 6px 10px;
+}
+.sidebar-note button {
+  width: 100%;
+  font-size: 12px;
+}
+
+.vault-form {
+  display: grid;
+  gap: 12px;
+}
