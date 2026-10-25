@@ -248,7 +248,10 @@ function SessionPane({
 }) {
   const mount = useRef<HTMLDivElement>(null),
     controller = useRef<TerminalSession | null>(null),
-    password = useRef<HTMLInputElement>(null);
+    password = useRef<HTMLInputElement>(null),
+    passphrase = useRef<HTMLInputElement>(null),
+    privateKey = useRef<HTMLInputElement>(null);
+  const [authMethod, setAuthMethod] = useState<"password" | "key">("password");
   const [status, setStatus] = useState(initialStatus);
   const busy = ["connecting", "open", "draining"].includes(status.state);
   useEffect(() => {
@@ -271,17 +274,24 @@ function SessionPane({
     const c = controller.current;
     if (!c) return;
     let secret = password.current?.value ?? "";
+    let keySecret = passphrase.current?.value ?? "";
+    if (passphrase.current) passphrase.current.value = "";
     if (password.current) password.current.value = "";
     void c.connect({
       host: tab.profile.host,
       port: tab.profile.port,
       user: tab.profile.user,
       knownHosts: tab.profile.knownHosts,
-      password: secret,
+      password: authMethod === "password" ? secret : "",
+      authMethod,
+      privateKeyPath:
+        authMethod === "key" ? (privateKey.current?.value ?? "") : "",
+      passphrase: authMethod === "key" ? keySecret : "",
       cols: c.terminal.cols,
       rows: c.terminal.rows,
     });
     secret = "";
+    keySecret = "";
   }
   return (
     <section
@@ -320,17 +330,51 @@ function SessionPane({
                 ? "Conectar ao servidor"
                 : "Iniciar uma nova sessão"}
             </h2>
-            <p>A senha é usada apenas nesta conexão.</p>
+            <p>Credenciais usadas apenas nesta conexão.</p>
           </div>
           <label>
-            Senha
-            <input
-              ref={password}
-              type="password"
-              autoComplete="off"
-              aria-label={`Senha para ${tab.profile.name}`}
-            />
+            Autenticação
+            <select
+              aria-label="Autenticação"
+              value={authMethod}
+              onChange={(e) => {
+                if (password.current) password.current.value = "";
+                if (passphrase.current) passphrase.current.value = "";
+                setAuthMethod(e.target.value as "password" | "key");
+              }}
+            >
+              <option value="password">Senha</option>
+              <option value="key">Chave SSH</option>
+            </select>
           </label>
+          {authMethod === "key" ? (
+            <>
+              <label>
+                Arquivo da chave privada
+                <input
+                  ref={privateKey}
+                  required
+                  maxLength={4096}
+                  autoComplete="off"
+                  placeholder="Caminho completo no computador"
+                />
+              </label>
+              <label>
+                Passphrase (se houver)
+                <input ref={passphrase} type="password" autoComplete="off" />
+              </label>
+            </>
+          ) : (
+            <label>
+              Senha
+              <input
+                ref={password}
+                type="password"
+                autoComplete="off"
+                aria-label={`Senha para ${tab.profile.name}`}
+              />
+            </label>
+          )}
           <button type="submit">
             Conectar <span aria-hidden="true">→</span>
           </button>

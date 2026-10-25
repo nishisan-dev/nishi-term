@@ -8,7 +8,7 @@ Implementada em 24/10/2026 após aprovação do usuário: estrutura visual, perf
 2. Prepare um arquivo known_hosts com identidades verificadas por canal confiável.
 3. Use o botão + de Conexões para cadastrar nome, grupo, host, porta, usuário e caminho completo do known_hosts. O grupo é opcional; grupos são derivados dos perfis, sem cadastro separado.
 4. Selecione a conexão na árvore ou use Ctrl+K para buscar por nome, grupo, host ou usuário. Abrir aba não inicia a conexão.
-5. Informe a senha na aba e conecte. A senha não é salva; cada nova conexão exige autenticação.
+5. Escolha senha ou chave SSH na aba. Para chave, informe caminho local e passphrase se houver. Segredos não são salvos; cada nova conexão exige autenticação.
 6. Alterne entre até quatro abas. Abas ocultas pausam leitura; o indicador de pausa informa que o estado será atualizado ao selecionar. O comando remoto pode bloquear ao preencher os buffers de saída.
 7. Desconecte ou feche a aba. Fechar durante conexão/sessão exige confirmação. Abas encerradas ocupam um dos quatro lugares até serem fechadas.
 

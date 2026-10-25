@@ -40,7 +40,7 @@ func signer(t *testing.T) ssh.Signer {
 	}
 	return s
 }
-func server(t *testing.T, payload []byte, exit uint32) *fixture {
+func server(t *testing.T, payload []byte, exit uint32, allowedKeys ...ssh.PublicKey) *fixture {
 	t.Helper()
 	f := &fixture{key: signer(t), resize: make(chan [2]uint32, 8)}
 	listener, e := net.Listen("tcp", "127.0.0.1:0")
@@ -61,6 +61,16 @@ func server(t *testing.T, payload []byte, exit uint32) *fixture {
 		}
 		return nil, nil
 	}}
+	if len(allowedKeys) > 0 {
+		config.PasswordCallback = nil
+		config.PublicKeyCallback = func(_ ssh.ConnMetadata, key ssh.PublicKey) (*ssh.Permissions, error) {
+			f.auth.Add(1)
+			if bytes.Equal(key.Marshal(), allowedKeys[0].Marshal()) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("auth denied")
+		}
+	}
 	config.AddHostKey(f.key)
 	var mu sync.Mutex
 	var conns []net.Conn

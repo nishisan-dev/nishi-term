@@ -184,6 +184,7 @@ export class TerminalSession {
   async connect(c: Config) {
     if (this.busy || this.disposed) {
       c.password = "";
+      c.passphrase = "";
       return;
     }
     this.busy = true;
@@ -198,6 +199,7 @@ export class TerminalSession {
         pending = api().Start(c);
       } finally {
         c.password = "";
+        c.passphrase = "";
       }
       const id = await pending;
       if (!this.current(gen)) {

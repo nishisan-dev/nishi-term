@@ -52,3 +52,9 @@ Adotar a hierarquia e direção visual descritas em [UI_REFERENCE.md](UI_REFEREN
 | F15 | Estrutura visual | Tema escuro, árvore, busca, abas e status; terminal dominante; layout verificado em browser 1280×800 e 800×540 |
 
 Grupos vazios não são persistidos. Abas encerradas ocupam limite até fechar. Não restaurar sessões nem senhas ao reiniciar. Status oculto é o último observado; a pausa pode bloquear a produção remota quando os buffers SSH enchem. Cofre, chaves, SFTP e métricas ficam fora desta aprovação. Guia: [PRODUCT_WORKSPACE.md](PRODUCT_WORKSPACE.md).
+
+## Etapa 3B — autorização de CI e chave SSH
+
+Autenticação por arquivo de chave privada com passphrase opcional autorizada após a etapa 3A. Escolha explícita na aba, sem fallback, agent ou persistência de credenciais. Known_hosts continua estrito. Testes automatizados Linux/Windows e builds Windows via Linux + Linux nativo no GitHub Actions. Detalhes em [CI.md](CI.md) e [CREDENTIALS.md](CREDENTIALS.md).
+
+Requisito permanente: cofre de senhas com autenticação explícita para desbloquear, utilizável sem administrador. Está especificado, ainda não implementado; proteger dados pela conta do sistema sem novo desbloqueio não atende sozinho ao requisito.

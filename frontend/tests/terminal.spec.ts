@@ -56,6 +56,13 @@ async function bridge(page: Page, mode = "stream") {
               return m.profiles;
             },
             Start: async (c: any) => {
+              m.auth = {
+                method: c.authMethod,
+                path: c.privateKeyPath,
+                hasPassword: !!c.password,
+                hasPassphrase: !!c.passphrase,
+              };
+              m.configRef = c;
               if (mode === "fail")
                 throw "handshake SSH recusado: verifique identidade do host, credenciais e rede";
               const id = `session-${++m.next}`;
@@ -369,4 +376,43 @@ test("oversized paste closes only its session without sending partial commands",
   await expect
     .poll(() => page.evaluate(() => (window as any).mock.closes))
     .toEqual(["session-1"]);
+});
+
+test("key authentication clears passphrase and never saves credentials", async ({
+  page,
+}) => {
+  await bridge(page, "fail");
+  await page.goto("/");
+  await page.getByRole("button", { name: "Alpha", exact: true }).click();
+  await page.getByLabel("Autenticação", { exact: true }).selectOption("key");
+  await page.getByLabel("Arquivo da chave privada").fill("/fixture/id_ed25519");
+  await page.getByLabel("Passphrase (se houver)").fill("ephemeral-key-canary");
+  await page.getByRole("button", { name: "Conectar", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("handshake SSH recusado");
+  await expect(page.getByLabel("Passphrase (se houver)")).toHaveValue("");
+  expect(await page.evaluate(() => (window as any).mock.auth)).toEqual({
+    method: "key",
+    path: "/fixture/id_ed25519",
+    hasPassword: false,
+    hasPassphrase: true,
+  });
+  expect(
+    await page.evaluate(() => (window as any).mock.configRef.passphrase),
+  ).toBe("");
+  expect(await page.evaluate(() => (window as any).mock.saves)).toEqual([]);
+  expect(await page.evaluate(() => localStorage.length)).toBe(0);
+  await page.getByLabel("Passphrase (se houver)").fill("discard-on-switch");
+  await page
+    .getByLabel("Autenticação", { exact: true })
+    .selectOption("password");
+  await expect(page.getByLabel("Senha para Alpha")).toHaveValue("");
+  await page.getByLabel("Autenticação", { exact: true }).selectOption("key");
+  await expect(page.getByLabel("Passphrase (se houver)")).toHaveValue("");
+  await page.setViewportSize({ width: 800, height: 540 });
+  await expect(
+    page.getByRole("button", { name: "Conectar", exact: true }),
+  ).toBeInViewport();
+  await page.screenshot({
+    path: path.resolve("../docs/evidence/product-ui/key-auth-fixture.png"),
+  });
 });

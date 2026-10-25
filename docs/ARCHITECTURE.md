@@ -54,3 +54,7 @@ Alterações usam temporário no mesmo diretório, Sync, Close e Rename. Diretó
 `frontend/src/session.ts` mantém TerminalSession por painel React: xterm, geração de tentativa, entrada limitada, resize serializado e Poll/ACK. Trocar aba preserva a instância. Aba oculta suspende leitura/processamento; uma resposta em voo pode ficar retida até voltar a ficar visível. Cancelamento acorda a espera; gerações descartam respostas antigas. Backpressure pode bloquear o produtor remoto. Status oculto é o último observado.
 
 Cada aba guarda cópia dos metadados; CRUD não altera conexões existentes. A senha é solicitada por tentativa e removida do formulário/configuração temporária após iniciar a chamada. Fechar aba desmonta o controlador; Start que terminar depois tem sua sessão fechada. Shutdown do backend continua fechando todas as sessões.
+
+## Autenticação por chave
+
+Config de conexão aceita `authMethod`, `privateKeyPath` e `passphrase`, além da senha. Campos são mutuamente exclusivos e validados no backend; perfis não recebem segredos nem conteúdo de chave. `internal/sshengine/auth.go` lê a chave local e constrói o método SSH; parsing ocorre dentro do trabalhador da sessão, sem bloquear o manager. O arquivo tem limite de 1 MiB; o custo bcrypt OpenSSH também é limitado. Uma tentativa cancelada durante parsing não abre conexão depois. Ver [CREDENTIALS.md](CREDENTIALS.md) para limites e desenho futuro do cofre independente do motor.

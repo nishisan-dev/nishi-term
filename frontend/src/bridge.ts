@@ -3,6 +3,9 @@ export type Config = {
   port: number;
   user: string;
   password: string;
+  authMethod?: "password" | "key";
+  privateKeyPath?: string;
+  passphrase?: string;
   knownHosts: string;
   cols: number;
   rows: number;

@@ -39,7 +39,7 @@ Saída: `build/bin/NishiTerm.exe` (Windows amd64). O script obtém a versão exa
 3. Cadastre uma conexão com nome, grupo, host, porta, usuário e caminho completo do known_hosts. Abra uma aba pela árvore ou busca Ctrl+K, informe a senha e conecte a um servidor de teste que permita senha e PTY.
 4. Teste teclado, comandos, resize e desconexão. A senha sai do formulário ao conectar e não é salva. Host desconhecido/trocado/revogado é recusado.
 
-Perfis persistem somente metadados. Até quatro abas têm sessões independentes; abas ocultas pausam leitura e retomam ao selecionar. Esta fase não oferece chave privada, agent, cofre ou reconexão automática. Colagens acima de 32 KiB ou congestionamento de entrada encerram a sessão com aviso; comandos já enviados não podem ser desfeitos.
+Perfis persistem somente metadados. Até quatro abas têm sessões independentes; abas ocultas pausam leitura e retomam ao selecionar. A conexão também aceita arquivo de chave privada com passphrase opcional. Agent, cofre e reconexão automática ainda não estão disponíveis. Colagens acima de 32 KiB ou congestionamento de entrada encerram a sessão com aviso; comandos já enviados não podem ser desfeitos.
 
 ## Desenvolvimento e testes
 
@@ -72,3 +72,7 @@ Para desenvolvimento desktop Linux, instale as dependências GTK3/WebKitGTK da d
 Copyright 2026 Lucas Nishimura — [lucas@nishisan.dev](mailto:lucas@nishisan.dev). Código original sob [Apache-2.0](LICENSE), com atribuição em [NOTICE](NOTICE). A licença permite uso comercial e derivados fechados, exigindo preservar os avisos aplicáveis conforme seus termos; não obriga exibir crédito na tela do aplicativo. Dependências e recursos de terceiros mantêm suas próprias licenças.
 
 Veja [CONTRIBUTING.md](CONTRIBUTING.md) para contribuir. Relatórios e roteiros específicos da infraestrutura de laboratório original ficam locais; a base pública inclui testes reproduzíveis sem credenciais reais.
+
+## CI, Linux e chaves SSH
+
+[Testes e builds no GitHub Actions](https://github.com/nishisan-dev/nishi-term/actions/workflows/ci.yml) geram artifacts Windows e Linux após aprovação das suítes. Veja [CI e execução Linux](docs/CI.md). No formulário da aba, selecione **Chave SSH**, informe o caminho local e a passphrase se necessária. O conteúdo da chave fica no backend; não é salvo nos perfis. Veja [formatos, limites e requisito do cofre autenticado](docs/CREDENTIALS.md).

@@ -19,3 +19,9 @@ Capturadas pela suíte Playwright em 24/10/2026, no Chrome/Linux, com bridge Wai
 ![Janela compacta com saída simulada](compact-fixture.png)
 
 As capturas foram inspecionadas visualmente. O teste aguarda o ajuste do xterm antes de capturar os terminais. Reprodução: `CHROME_PATH=/usr/bin/google-chrome npm test --prefix frontend`. Ver [guia e limitações](../../PRODUCT_WORKSPACE.md).
+
+## Autenticação por chave — 800×540
+
+![Formulário de chave após falha simulada, sem segredo preenchido](key-auth-fixture.png)
+
+Captura adicional do fluxo de chave com bridge simulado. A mensagem de erro é produzida pela fixture; não é falha de conexão real.

@@ -28,13 +28,16 @@ const (
 var ErrClosed = errors.New("sessão inexistente ou encerrada")
 
 type Config struct {
-	Host       string `json:"host"`
-	Port       int    `json:"port"`
-	User       string `json:"user"`
-	Password   string `json:"password"`
-	KnownHosts string `json:"knownHosts"`
-	Cols       int    `json:"cols"`
-	Rows       int    `json:"rows"`
+	Host           string `json:"host"`
+	Port           int    `json:"port"`
+	User           string `json:"user"`
+	Password       string `json:"password"`
+	AuthMethod     string `json:"authMethod"`
+	PrivateKeyPath string `json:"privateKeyPath"`
+	Passphrase     string `json:"passphrase"`
+	KnownHosts     string `json:"knownHosts"`
+	Cols           int    `json:"cols"`
+	Rows           int    `json:"rows"`
 }
 type Frame struct {
 	Sequence uint64 `json:"sequence"`
@@ -68,6 +71,9 @@ func dimensions(cols, rows int) bool { return cols > 0 && cols <= 1000 && rows >
 func (m *Manager) Start(c Config) (string, error) {
 	if len(c.Host) > 253 || len(c.User) > 256 || len(c.Password) > 65536 || len(c.KnownHosts) > 4096 || strings.TrimSpace(c.Host) == "" || strings.ContainsAny(c.Host, "\x00\r\n") || c.Port < 1 || c.Port > 65535 || c.User == "" || c.KnownHosts == "" || !dimensions(c.Cols, c.Rows) {
 		return "", errors.New("parâmetros de conexão inválidos")
+	}
+	if (c.AuthMethod != "" && c.AuthMethod != "password" && c.AuthMethod != "key") || len(c.PrivateKeyPath) > 4096 || len(c.Passphrase) > 65536 || strings.ContainsAny(c.PrivateKeyPath, "\x00\r\n") || (c.AuthMethod == "key" && (strings.TrimSpace(c.PrivateKeyPath) == "" || c.Password != "")) || (c.AuthMethod != "key" && (c.PrivateKeyPath != "" || c.Passphrase != "")) {
+		return "", errors.New("método de autenticação inválido")
 	}
 	info, err := os.Stat(c.KnownHosts)
 	if err != nil || !info.Mode().IsRegular() || info.Size() > 8*1024*1024 {
@@ -244,6 +250,15 @@ func (m *Manager) Resize(id string, cols, rows int) error {
 func (s *session) run(c Config, verify ssh.HostKeyCallback) {
 	defer close(s.done)
 	defer close(s.out)
+	auth, err := authentication(c)
+	c.Password, c.Passphrase = "", ""
+	if err != nil {
+		s.fail(err.Error())
+		return
+	}
+	if s.ctx.Err() != nil {
+		return
+	}
 	deadline := time.Now().Add(15 * time.Second)
 	dialCtx, cancel := context.WithDeadline(s.ctx, deadline)
 	defer cancel()
@@ -259,8 +274,8 @@ func (s *session) run(c Config, verify ssh.HostKeyCallback) {
 	stopWatch := context.AfterFunc(s.ctx, func() { _ = conn.Close() })
 	defer stopWatch()
 	_ = conn.SetDeadline(deadline)
-	config := &ssh.ClientConfig{User: c.User, Auth: []ssh.AuthMethod{ssh.Password(c.Password)}, HostKeyCallback: verify}
-	c.Password = ""
+	config := &ssh.ClientConfig{User: c.User, Auth: []ssh.AuthMethod{auth}, HostKeyCallback: verify}
+	auth = nil
 	cc, chans, reqs, err := ssh.NewClientConn(conn, net.JoinHostPort(c.Host, strconv.Itoa(c.Port)), config)
 	config.Auth = nil
 	if err != nil {
