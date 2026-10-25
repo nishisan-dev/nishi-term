@@ -190,22 +190,22 @@ func TestLabOutput64MiBPaused30Seconds(t *testing.T) {
 	p.until("END_LOAD\n")
 	labRecord(t, "outputIntegrity", map[string]any{"bytes": n, "sha256": fmt.Sprintf("%x", received.Sum(nil)), "closeMs": labClose(t, m, p.id).Seconds() * 1000})
 }
-func TestLabFourSessionsIsolation(t *testing.T) {
+func TestLabSixteenSessionsIsolation(t *testing.T) {
 	c := labConfig(t)
 	m := manager(t)
-	ps := make([]*labStream, 4)
+	ps := make([]*labStream, MaxSessions)
 	for i := range ps {
 		ps[i] = labOpen(t, m, c)
 	}
 	if _, e := m.Start(c); e == nil {
-		t.Fatal("fifth session accepted")
+		t.Fatal("session above configured capacity accepted")
 	}
 	ps[0].send("python3 -c \"import os; b=b'x'*65536; exec('while True: os.write(1,b)')\"\n")
 	slow, _ := m.get(ps[0].id)
 	eventually(t, func() bool { return len(slow.out) == QueueSize })
 	var wg sync.WaitGroup
-	times := make(chan time.Duration, 60)
-	for i := 1; i < 4; i++ {
+	times := make(chan time.Duration, (MaxSessions-1)*20)
+	for i := 1; i < MaxSessions; i++ {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
@@ -227,12 +227,12 @@ func TestLabFourSessionsIsolation(t *testing.T) {
 	}
 	sort.Float64s(ms)
 	closeMS := labClose(t, m, ps[0].id).Seconds() * 1000
-	for i := 1; i < 4; i++ {
+	for i := 1; i < MaxSessions; i++ {
 		ps[i].send("printf 'STILL_%s\\n' OPEN\n")
 		ps[i].until("STILL_OPEN\n")
 	}
-	labRecord(t, "fourSessions", map[string]any{"interactiveSamples": len(ms), "roundTripP95Ms": ms[56], "roundTripMaxMs": ms[len(ms)-1], "blockedCloseMs": closeMS, "remainingSessionsRespond": true})
-	if ms[56] > 250 {
+	labRecord(t, "sixteenSessions", map[string]any{"interactiveSamples": len(ms), "roundTripP95Ms": ms[(len(ms)*95+99)/100-1], "roundTripMaxMs": ms[len(ms)-1], "blockedCloseMs": closeMS, "remainingSessionsRespond": true})
+	if ms[(len(ms)*95+99)/100-1] > 250 {
 		t.Error("LAN interactive p95 exceeded 250ms")
 	}
 }

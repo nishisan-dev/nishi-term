@@ -23,3 +23,5 @@
 
 - Autorizado: identidades gerenciadas com confirmação explícita na mesma conexão, token por sessão e bloqueio de chave divergente; known_hosts externo opcional/estrito. Nunca aceitar mudança de chave automaticamente. Ver docs/HOST_TRUST.md.
 - Cofre inicial autorizado: somente persistência criptografada em internal/vault, senha mestra explícita sem admin, bloqueio manual/automático e sem API de ler segredos no renderer. A regra anterior de não persistir segredos passa a permitir exclusivamente esse cofre validado; perfis/logs/storage do browser continuam sem segredos. Ver docs/CREDENTIALS.md.
+
+- Ampliação autorizada: 16 sessões ativas/conectando, sem contar abas desconectadas ou workers finalizados. Preservar todos os limites por sessão e a saída final; cancelamento só libera capacidade após encerrar o worker. Testes de carga `TestSixteen*` em loopback e CI Linux/Windows são gate antes de disponibilizar novo build. Ver docs/SESSION_CAPACITY.md. Esta regra substitui os limites históricos de quatro abas/sessões acima.

@@ -729,6 +729,29 @@ function App() {
     } | null>(null),
     [deleting, setDeleting] = useState(false);
   const [sidebar, setSidebar] = useState(true);
+  const [sessionUsage, setSessionUsage] = useState<number | null>(null);
+  useEffect(() => {
+    let disposed = false,
+      pending = false;
+    const refresh = async () => {
+      if (pending) return;
+      pending = true;
+      try {
+        const usage = await api().SessionUsage();
+        if (!disposed) setSessionUsage(usage);
+      } catch {
+        if (!disposed) setSessionUsage(null);
+      } finally {
+        pending = false;
+      }
+    };
+    void refresh();
+    const timer = setInterval(() => void refresh(), 1000);
+    return () => {
+      disposed = true;
+      clearInterval(timer);
+    };
+  }, []);
   const active = tabs.find((t) => t.id === selected);
   const groups = [...new Set(profiles.map((p) => p.group))].sort((a, b) =>
     a.localeCompare(b, "pt-BR"),
@@ -771,13 +794,6 @@ function App() {
     [],
   );
   function open(p: Profile) {
-    if (tabs.length >= 4) {
-      setError(
-        "Limite de quatro abas. Feche uma aba para abrir outra conexão.",
-      );
-      setSearch(false);
-      return;
-    }
     const id = crypto.randomUUID();
     setTabs((ts) => [...ts, { id, profile: { ...p }, status: initialStatus }]);
     setSelected(id);
@@ -975,7 +991,6 @@ function App() {
           <button
             className="icon-button new-tab"
             aria-label="Abrir conexão"
-            disabled={tabs.length >= 4}
             onClick={() => {
               setQuery("");
               setSearch(true);
@@ -1028,7 +1043,7 @@ function App() {
               <p>
                 Organize seus servidores em grupos e trabalhe
                 <br />
-                com até quatro sessões SSH independentes.
+                com até 16 sessões SSH independentes.
               </p>
               <div className="welcome-actions">
                 <button
@@ -1076,7 +1091,10 @@ function App() {
             : "SSH · verificação estrita de identidade"}
         </span>
         <span className="footer-right">
-          {tabs.length}/4 abas
+          <span title="Conexões ativas ou conectando, incluindo entrega da saída final. Atualizado pelo backend.">
+            {sessionUsage ?? "—"}/16 sessões
+          </span>
+          <span className="divider" /> {tabs.length} abas
           {active && (
             <>
               <span className="divider" /> {active.status.cols} ×{" "}

@@ -105,3 +105,5 @@ func (a *App) DeleteCredential(id string) error {
 	}
 	return a.vault.Delete(id)
 }
+
+func (a *App) SessionUsage() int { return a.engine.ActiveCount() }

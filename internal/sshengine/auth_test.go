@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
@@ -75,7 +76,19 @@ func TestPrivateKeyAuthentication(t *testing.T) {
 			if mode == "plain" || mode == "encrypted" {
 				want = "open"
 			}
-			eventually(t, func() bool { state, _ := s.status(); return state == want })
+			// Encrypted key derivation is CPU-bound and slower under the race
+			// detector. This test budget does not change the network deadline.
+			deadline := time.Now().Add(20 * time.Second)
+			for {
+				state, message := s.status()
+				if state == want {
+					break
+				}
+				if state == "failed" || time.Now().After(deadline) {
+					t.Fatalf("expected %s, got %s: %s", want, state, message)
+				}
+				time.Sleep(10 * time.Millisecond)
+			}
 			_, public := s.status()
 			if strings.Contains(public, pass) && pass != "" {
 				t.Fatal("secret in error")

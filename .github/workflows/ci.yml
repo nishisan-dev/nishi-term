@@ -23,7 +23,14 @@ jobs:
       - uses: actions/setup-go@924ae3a1cded613372ab5595356fb5720e22ba16 # v6
         with:
           go-version-file: go.mod
-      - run: go test -race -timeout 5m ./internal/...
+      - run: go test -race -timeout 5m -json ./internal/... > go-tests.json
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6
+        if: always()
+        with:
+          name: go-tests-${{ matrix.os }}
+          path: go-tests.json
+          if-no-files-found: error
+          retention-days: 14
       - run: go vet ./internal/...
   frontend:
     name: React / Chromium

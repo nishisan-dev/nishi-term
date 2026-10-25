@@ -1,6 +1,6 @@
 # Estado público da validação
 
-A etapa atual implementa perfis, busca e até quatro abas, com motor SSH independente.
+A etapa atual implementa perfis, busca e até 16 sessões ativas/conectando, com motor SSH independente.
 
 Testes Go com race detector, vet interno/Windows, nove testes Playwright e compilação Windows a partir de Linux passaram na preparação desta versão. Os testes Playwright usam bridge simulado; suas capturas estão em [evidence/product-ui](evidence/product-ui/README.md).
 
@@ -25,3 +25,5 @@ Nesta etapa, a suíte de interface passou com 12 testes. As suítes internas pas
 ## Feedback ao abrir e conectar
 
 A interface mostra preparação do terminal e progresso de conexão antes de inicialização/reset e chamada Start. Um teste com Start pendente verifica que o indicador já existe ao entrar no bridge, que cancelar continua disponível e que uma resposta tardia é encerrada sem Poll. O formulário tem controles de mesma altura e ações alinhadas; a animação respeita redução de movimento. Capturas usam bridge simulado. O relato do usuário motivou a mudança; não foi medido ganho de latência de rede.
+
+Capacidade atual e evidências de carga: [16 sessões](SESSION_CAPACITY.md).

@@ -1,6 +1,6 @@
 # Área de trabalho — etapa 3A
 
-Implementada em 24/10/2026 após aprovação do usuário: estrutura visual, perfis/grupos e quatro abas. Mantidos Go, Wails v2, React, xterm.js e motor SSH independente.
+Implementada em 24/10/2026 após aprovação do usuário: estrutura visual, perfis/grupos e abas independentes (capacidade ampliada posteriormente para 16 sessões). Mantidos Go, Wails v2, React, xterm.js e motor SSH independente.
 
 ## Como usar
 
@@ -9,8 +9,8 @@ Implementada em 24/10/2026 após aprovação do usuário: estrutura visual, perf
 3. Use o botão + de Conexões para cadastrar nome, grupo, host, porta, usuário e caminho completo do known_hosts. O grupo é opcional; grupos são derivados dos perfis, sem cadastro separado.
 4. Selecione a conexão na árvore ou use Ctrl+K para buscar por nome, grupo, host ou usuário. Abrir aba não inicia a conexão.
 5. Escolha senha ou chave SSH na aba. Para chave, informe caminho local e passphrase se houver. Segredos são temporários por padrão. O botão Salvar credencial no cofre permite persistência criptografada explícita após desbloquear o cofre.
-6. Alterne entre até quatro abas. Abas ocultas pausam leitura; o indicador de pausa informa que o estado será atualizado ao selecionar. O comando remoto pode bloquear ao preencher os buffers de saída.
-7. Desconecte ou feche a aba. Fechar durante conexão/sessão exige confirmação. Abas encerradas ocupam um dos quatro lugares até serem fechadas.
+6. Alterne entre abas, com até 16 sessões ativas ou conectando. Abas ocultas pausam leitura; o indicador de pausa informa que o estado será atualizado ao selecionar. O comando remoto pode bloquear ao preencher os buffers de saída.
+7. Desconecte ou feche a aba. Fechar durante conexão/sessão exige confirmação. Abas desconectadas e sessões já finalizadas não ocupam vagas. Conexões aguardando confirmação de identidade e sessões ainda entregando saída contam até terminar.
 
 Editar ou excluir perfil não modifica abas já abertas: cada uma preserva os metadados usados ao abrir. Não há reconexão automática nem restauração de sessões ao reiniciar.
 

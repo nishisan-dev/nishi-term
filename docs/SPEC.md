@@ -19,7 +19,7 @@ Validar uma sessão SSH interativa em janela nativa com PTY remoto, teclado, red
 | F03 | Verificação estrita de host | Identidade gerenciada: desconhecida exige confirmação explícita; alterada bloqueia. Arquivo externo opcional: modo estrito, incluindo revogação; sem aceite automático |
 | F04 | Terminal interativo | ANSI, Unicode fragmentado, Ctrl-C e resize; saída entregue como bytes ao xterm |
 | F05 | Backpressure ponta a ponta | Fila de saída limitada; próximo lote somente após callback de processamento do xterm; sem descarte silencioso |
-| F06 | Gerenciar sessões | ID opaco por tentativa, cancelamento durante conexão e execução, fechamento idempotente; máximo de quatro sessões no motor e quatro abas na UI atual |
+| F06 | Gerenciar sessões | ID opaco por tentativa, cancelamento durante conexão e execução, fechamento idempotente; máximo de 16 sessões ativas/conectando no motor; abas desconectadas ou já finalizadas não ocupam vagas |
 | F07 | Erros e término explícitos | Estado conectando/aberto/drenando/fechado/falhou; erro público sem payload de credencial; última saída drenada antes do término |
 | F08 | Compilar Windows a partir de Linux | Produzir executável Windows amd64 com Wails v2 estável; testar execução separadamente em Windows |
 | F09 | Sem privilégios administrativos | Executável portable, dados WebView em diretório do usuário, nenhuma escrita em Program Files/HKLM nem instalador elevado |

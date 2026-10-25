@@ -1,0 +1,22 @@
+=== RUN   TestSixteenConcurrentAdmission
+--- PASS: TestSixteenConcurrentAdmission (0.01s)
+=== RUN   TestSixteenConnectingAndEndedCapacity
+=== RUN   TestSixteenConnectingAndEndedCapacity/pending_consent_occupies_slots
+=== RUN   TestSixteenConnectingAndEndedCapacity/completed_and_failed_records_do_not_occupy_slots
+--- PASS: TestSixteenConnectingAndEndedCapacity (0.50s)
+    --- PASS: TestSixteenConnectingAndEndedCapacity/pending_consent_occupies_slots (0.03s)
+    --- PASS: TestSixteenConnectingAndEndedCapacity/completed_and_failed_records_do_not_occupy_slots (0.47s)
+=== RUN   TestSixteenLoadIntegrity
+    lab_test.go:125: MEASUREMENT sixteenLoad {"bytes":67108864,"elapsedMs":5668,"middle":{"heapBytes":52106288,"rssBytes":208740352,"handlesOrFDs":39,"goroutines":307},"pauseMs":3000,"paused":{"heapBytes":52116304,"rssBytes":208789504,"handlesOrFDs":39,"goroutines":307},"queueBlocksPerSession":8,"sessions":16,"sha256PerSession":"baa7a6d36ffa957552df230235c2d51d735f28d49c58a5f3438a3a973a25a37d"}
+--- PASS: TestSixteenLoadIntegrity (5.69s)
+=== RUN   TestSixteenIsolation
+    lab_test.go:125: MEASUREMENT sixteenIsolation {"blockedCloseMs":0.478754,"blockedSessions":1,"interactiveSessions":15,"maxMs":3.415759,"p95Ms":1.688952,"remainingSessionsRespond":true,"replacementAccepted":true,"samples":300}
+--- PASS: TestSixteenIsolation (0.33s)
+=== RUN   TestSixteenCleanup
+=== RUN   TestSixteenCleanup/four_waves
+=== NAME  TestSixteenCleanup
+    lab_test.go:125: MEASUREMENT sixteenCleanup {"after":{"heapBytes":715240,"rssBytes":319520768,"handlesOrFDs":6,"goroutines":2},"before":{"heapBytes":679800,"rssBytes":327749632,"handlesOrFDs":6,"goroutines":2},"connections":64,"waves":4}
+--- PASS: TestSixteenCleanup (0.30s)
+    --- PASS: TestSixteenCleanup/four_waves (0.20s)
+PASS
+ok  	nishiterm/internal/sshengine	7.861s

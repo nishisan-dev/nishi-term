@@ -35,6 +35,7 @@ export type Profile = {
 };
 export type VaultStatus = { exists: boolean; locked: boolean };
 export interface Bridge {
+  SessionUsage(): Promise<number>;
   VaultStatus(): Promise<VaultStatus>;
   CreateVault(master: string): Promise<void>;
   UnlockVault(master: string): Promise<void>;

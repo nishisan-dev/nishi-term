@@ -23,7 +23,9 @@ const (
 	ChunkSize   = 16 * 1024
 	QueueSize   = 8
 	InputSize   = 4 * 1024
-	MaxSessions = 4
+	MaxSessions = 16
+	// Records with undelivered final output are retained separately from live sessions.
+	MaxSessionRecords = 256
 )
 
 var ErrClosed = errors.New("sessão inexistente ou encerrada")
@@ -52,6 +54,7 @@ type Manager struct {
 	trust    *hosttrust.Store
 	mu       sync.Mutex
 	sessions map[string]*session
+	workers  map[*session]struct{}
 	stopped  bool
 }
 type session struct {
@@ -72,7 +75,9 @@ type session struct {
 	pending            []byte
 }
 
-func NewManager() *Manager           { return &Manager{sessions: make(map[string]*session)} }
+func NewManager() *Manager {
+	return &Manager{sessions: make(map[string]*session), workers: make(map[*session]struct{})}
+}
 func dimensions(cols, rows int) bool { return cols > 0 && cols <= 1000 && rows > 0 && rows <= 1000 }
 func (m *Manager) Start(c Config) (string, error) {
 	if len(c.Host) > 253 || len(c.User) > 256 || len(c.Password) > 65536 || len(c.KnownHosts) > 4096 || strings.TrimSpace(c.Host) == "" || strings.ContainsAny(c.Host, "\x00\r\n") || c.Port < 1 || c.Port > 65535 || c.User == "" || !dimensions(c.Cols, c.Rows) {
@@ -101,16 +106,39 @@ func (m *Manager) Start(c Config) (string, error) {
 	if m.stopped {
 		return "", ErrClosed
 	}
-	if len(m.sessions) >= MaxSessions {
-		return "", errors.New("limite de sessões atingido")
+	active := m.activeCountLocked()
+	if active >= MaxSessions {
+		return "", errors.New("limite de 16 sessões ativas ou conectando atingido; desconecte uma sessão para continuar")
 	}
+	if len(m.sessions) >= MaxSessionRecords {
+		return "", errors.New("há muitos resultados de sessões retidos; conclua a leitura ou feche sessões encerradas")
+	}
+
 	id := rand.Text()
 	ctx, cancel := context.WithCancel(context.Background())
 	s := &session{done: make(chan struct{}), ctx: ctx, cancel: cancel, state: "connecting", out: make(chan []byte, QueueSize), input: make(chan []byte, QueueSize)}
 	m.sessions[id] = s
-	go s.run(c, verify, m.trust)
+	m.workers[s] = struct{}{}
+	go func() {
+		defer func() { m.mu.Lock(); delete(m.workers, s); m.mu.Unlock() }()
+		s.run(c, verify, m.trust)
+	}()
 	return id, nil
 }
+
+// activeCountLocked counts workers still connecting or delivering session output.
+func (m *Manager) activeCountLocked() int {
+	active := 0
+	for s := range m.workers {
+		select {
+		case <-s.done:
+		default:
+			active++
+		}
+	}
+	return active
+}
+func (m *Manager) ActiveCount() int { m.mu.Lock(); defer m.mu.Unlock(); return m.activeCountLocked() }
 func (m *Manager) get(id string) (*session, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

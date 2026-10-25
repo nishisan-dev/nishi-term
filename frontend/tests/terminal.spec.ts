@@ -44,6 +44,8 @@ async function bridge(page: Page, mode = "stream") {
       w.go = {
         main: {
           App: {
+            SessionUsage: async () =>
+              Object.values(sessions).filter((s) => !s.closed).length,
             VaultStatus: async () => ({ ...m.vault }),
             CreateVault: async (_master: string) => {
               m.vault = { exists: true, locked: false };
@@ -100,6 +102,8 @@ async function bridge(page: Page, mode = "stream") {
                 throw "cofre bloqueado: desbloqueie com sua senha mestra";
               if (mode === "fail")
                 throw "handshake SSH recusado: verifique identidade do host, credenciais e rede";
+              if (Object.values(sessions).filter((s) => !s.closed).length >= 16)
+                throw "limite de 16 sessões ativas ou conectando atingido";
               const id = `session-${++m.next}`;
               sessions[id] = { seq: 0, host: c.host, closed: false };
               if (mode === "pending")
@@ -305,18 +309,18 @@ test("profiles edit metadata, Ctrl+K searches accents, deleting preserves open s
     page.getByRole("tab", { name: "São Paulo", exact: true }),
   ).toBeVisible();
 });
-test("four tab cap and keyboard navigation", async ({ page }) => {
+test("disconnected tabs do not consume session slots and preserve keyboard navigation", async ({
+  page,
+}) => {
   await bridge(page);
   await page.goto("/");
-  for (let i = 0; i < 4; i++)
+  for (let i = 0; i < 17; i++)
     await page.getByRole("button", { name: "Alpha", exact: true }).click();
-  await expect(page.getByRole("tab")).toHaveCount(4);
+  await expect(page.getByRole("tab")).toHaveCount(17);
   await expect(
     page.getByRole("button", { name: "Abrir conexão", exact: true }),
-  ).toBeDisabled();
-  await page.getByRole("button", { name: "Beta", exact: true }).click();
-  await expect(page.getByRole("alert")).toContainText("Limite de quatro abas");
-  await expect(page.getByRole("tab")).toHaveCount(4);
+  ).toBeEnabled();
+  await expect(page.locator(".footer-right")).toContainText("0/16 sessões");
   await page.getByRole("tab").last().focus();
   await page.keyboard.press("Home");
   await expect(page.getByRole("tab").first()).toHaveAttribute(
@@ -598,4 +602,33 @@ test("connection feedback is rendered before Start and cancellation stays availa
     .poll(() => page.evaluate(() => (window as any).mock.closes))
     .toEqual(["session-1"]);
   expect(await page.evaluate(() => (window as any).mock.polls)).toEqual([]);
+});
+
+test("sixteen live tabs, seventeenth rejected, disconnect frees capacity without closing tab", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  for (let i = 0; i < 16; i++) {
+    await open(page);
+    await expect(
+      page.locator('[role="tabpanel"]:visible .connection-state'),
+    ).toHaveText("Conectado");
+  }
+  await page.getByRole("button", { name: "Beta", exact: true }).click();
+  await page.getByLabel("Senha para Beta").fill("ephemeral");
+  await page.getByRole("button", { name: "Conectar", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("limite de 16 sessões");
+  await expect(page.getByRole("tab")).toHaveCount(17);
+  await page.getByRole("tab").first().click();
+  await page.getByRole("button", { name: "Desconectar", exact: true }).click();
+  await expect(page.locator(".footer-right")).toContainText("15/16 sessões");
+  await page.getByRole("tab").last().click();
+  await page.getByLabel("Senha para Beta").fill("ephemeral");
+  await page.getByRole("button", { name: "Conectar", exact: true }).click();
+  await expect(
+    page.locator('[role="tabpanel"]:visible .connection-state'),
+  ).toHaveText("Conectado");
+  await expect(page.locator(".footer-right")).toContainText("16/16 sessões");
+  await expect(page.getByRole("tab")).toHaveCount(17);
 });
