@@ -47,6 +47,7 @@ async function bridge(page: Page, mode = "stream") {
       w.go = {
         main: {
           App: {
+            HostLatencies: async () => m.latencies || {},
             ListKeys: async () => {
               if (m.vault.locked) throw "cofre bloqueado";
               return m.keys.map((key: any) => ({ ...key }));
@@ -919,7 +920,11 @@ test("group connect unlocks once, requires complete coverage and avoids duplicat
     m.savedCredentials = ["a"];
   });
   await page
-    .getByRole("button", { name: "Conectar grupo Laboratório", exact: true })
+    .locator("summary")
+    .filter({ hasText: "Laboratório" })
+    .click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "Conectar grupo", exact: true })
     .click();
   await page
     .getByRole("dialog")
@@ -935,7 +940,11 @@ test("group connect unlocks once, requires complete coverage and avoids duplicat
     (window as any).mock.savedCredentials = ["a", "b"];
   });
   await page
-    .getByRole("button", { name: "Conectar grupo Laboratório", exact: true })
+    .locator("summary")
+    .filter({ hasText: "Laboratório" })
+    .click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "Conectar grupo", exact: true })
     .click();
   await expect(page.getByRole("dialog")).toContainText("2/2 hosts");
   await page.screenshot({
@@ -949,7 +958,11 @@ test("group connect unlocks once, requires complete coverage and avoids duplicat
     .poll(() => page.evaluate(() => (window as any).mock.next))
     .toBe(2);
   await page
-    .getByRole("button", { name: "Conectar grupo Laboratório", exact: true })
+    .locator("summary")
+    .filter({ hasText: "Laboratório" })
+    .click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "Conectar grupo", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Conectar hosts do grupo", exact: true })
@@ -972,7 +985,11 @@ test("group exceeding available capacity starts no sessions", async ({
     (window as any).go.main.App.SessionUsage = async () => 15;
   });
   await page
-    .getByRole("button", { name: "Conectar grupo Laboratório", exact: true })
+    .locator("summary")
+    .filter({ hasText: "Laboratório" })
+    .click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "Conectar grupo", exact: true })
     .click();
   await page
     .getByRole("button", { name: "Conectar hosts do grupo", exact: true })
@@ -1090,7 +1107,11 @@ test("2FA is requested when connecting and in the group vault gate", async ({
     (window as any).mock.vault.locked = true;
   });
   await page
-    .getByRole("button", { name: "Conectar grupo Laboratório", exact: true })
+    .locator("summary")
+    .filter({ hasText: "Laboratório" })
+    .click({ button: "right" });
+  await page
+    .getByRole("menuitem", { name: "Conectar grupo", exact: true })
     .click();
   await page
     .getByRole("dialog")
@@ -1099,4 +1120,77 @@ test("2FA is requested when connecting and in the group vault gate", async ({
   await page.getByLabel("Código 2FA ou de recuperação").fill("123456");
   await page.getByRole("button", { name: "Desbloquear", exact: true }).click();
   await expect(page.getByRole("dialog")).toContainText("2/2 hosts");
+});
+
+test("profile remembers authentication and key path; vault prompts on opening", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Editar Alpha", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Editar conexão" });
+  await editor.getByLabel("Autenticação do perfil").selectOption("key");
+  await editor
+    .getByLabel("Caminho da chave privada")
+    .fill("/fixture/id_ed25519");
+  await editor.getByRole("button", { name: "Salvar conexão" }).click();
+  await page.getByRole("button", { name: "Alpha", exact: true }).click();
+  await expect(page.getByLabel("Autenticação", { exact: true })).toHaveValue(
+    "key",
+  );
+  await expect(page.getByLabel("Arquivo da chave privada")).toHaveValue(
+    "/fixture/id_ed25519",
+  );
+  await page.getByRole("button", { name: "Editar Beta", exact: true }).click();
+  await editor.getByLabel("Autenticação do perfil").selectOption("vault");
+  await editor.getByRole("button", { name: "Salvar conexão" }).click();
+  await page.evaluate(() => {
+    (window as any).mock.vault.exists = true;
+  });
+  await page.getByRole("button", { name: "Beta", exact: true }).click();
+  await expect(
+    page.getByRole("dialog", { name: "Desbloquear cofre para conectar" }),
+  ).toBeVisible();
+});
+
+test("group context menu and optional RTT do not change connection state", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  const group = page.locator("summary").filter({ hasText: "Laboratório" });
+  await group.focus();
+  await page.keyboard.press("Shift+F10");
+  await expect(
+    page.getByRole("menuitem", { name: "Conectar grupo" }),
+  ).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toHaveCount(0);
+  await page.evaluate(() => {
+    (window as any).mock.latencies = {
+      "alpha.invalid": {
+        milliseconds: 200,
+        address: "192.0.2.1",
+        measuredAt: Date.now(),
+      },
+    };
+  });
+  await expect(
+    page.getByRole("button", { name: "Alpha", exact: true }).locator("small"),
+  ).toHaveText("200 ms");
+  await expect(
+    page.getByRole("button", { name: "Beta", exact: true }).locator("small"),
+  ).toHaveCount(0);
+  await group.click({ button: "right" });
+  await page.screenshot({
+    path: path.resolve(
+      "../docs/evidence/product-ui/group-menu-rtt-fixture.png",
+    ),
+  });
+  await page.keyboard.press("Escape");
+  await page.evaluate(() => {
+    (window as any).mock.latencies = {};
+  });
+  await expect(page.locator(".host-rtt")).toHaveCount(0);
+  await expect(page.getByRole("tab")).toHaveCount(0);
 });

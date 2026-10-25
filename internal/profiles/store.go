@@ -16,13 +16,15 @@ const MaxProfiles = 200
 const maxFileSize = 2 << 20
 
 type Profile struct {
-	ID         string `json:"id"`
-	Name       string `json:"name"`
-	Group      string `json:"group"`
-	Host       string `json:"host"`
-	Port       int    `json:"port"`
-	User       string `json:"user"`
-	KnownHosts string `json:"knownHosts"`
+	AuthMethod     string `json:"authMethod,omitempty"`
+	PrivateKeyPath string `json:"privateKeyPath,omitempty"`
+	ID             string `json:"id"`
+	Name           string `json:"name"`
+	Group          string `json:"group"`
+	Host           string `json:"host"`
+	Port           int    `json:"port"`
+	User           string `json:"user"`
+	KnownHosts     string `json:"knownHosts"`
 }
 type document struct {
 	Version  int       `json:"version"`
@@ -38,10 +40,26 @@ func New(path string) *Store { return &Store{path: path} }
 var errRead = errors.New("não foi possível ler os perfis; o arquivo existente foi preservado")
 
 func validate(p Profile) error {
+	switch p.AuthMethod {
+	case "", "password", "vault":
+		if p.PrivateKeyPath != "" {
+			return errors.New("caminho de chave exige autenticação por chave")
+		}
+	case "key":
+		if strings.TrimSpace(p.PrivateKeyPath) == "" {
+			return errors.New("informe o caminho da chave privada")
+		}
+	default:
+		return errors.New("método de autenticação inválido")
+	}
+	if len(p.PrivateKeyPath) > 4096 {
+		return errors.New("caminho de chave inválido")
+	}
+
 	if strings.TrimSpace(p.Name) == "" || len(p.Name) > 100 || len(p.Group) > 100 || strings.TrimSpace(p.Host) == "" || len(p.Host) > 253 || p.Port < 1 || p.Port > 65535 || strings.TrimSpace(p.User) == "" || len(p.User) > 256 || len(p.KnownHosts) > 4096 || len(p.ID) > 64 {
 		return errors.New("perfil inválido: confira nome, endereço, porta, usuário e known_hosts")
 	}
-	for _, v := range []string{p.ID, p.Name, p.Group, p.Host, p.User, p.KnownHosts} {
+	for _, v := range []string{p.ID, p.Name, p.Group, p.Host, p.User, p.KnownHosts, p.PrivateKeyPath} {
 		if strings.ContainsAny(v, "\x00\r\n") {
 			return errors.New("perfil contém caracteres inválidos")
 		}

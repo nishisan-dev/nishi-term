@@ -24,6 +24,7 @@ func main() {
 	err = wails.Run(&options.App{
 		Title: "NishiTerm", Width: 1200, Height: 780, MinWidth: 800, MinHeight: 540,
 		AssetServer: &assetserver.Options{Assets: assets},
+		OnStartup:   app.startup,
 		OnShutdown:  app.shutdown, Bind: []interface{}{app},
 		Windows: &windows.Options{WebviewUserDataPath: filepath.Join(data, "NishiTerm", "WebView2")},
 	})

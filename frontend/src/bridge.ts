@@ -25,6 +25,8 @@ export type Frame = {
   error: string;
 };
 export type Profile = {
+  authMethod?: "password" | "key" | "vault";
+  privateKeyPath?: string;
   id: string;
   name: string;
   group: string;
@@ -50,7 +52,12 @@ export type RemoteDirectory = {
     symlink: boolean;
   }[];
 };
+export type Latencies = Record<
+  string,
+  { milliseconds: number; address: string; measuredAt: number }
+>;
 export interface Bridge {
+  HostLatencies(): Promise<Latencies>;
   GenerateKey(label: string): Promise<KeyInfo>;
   ListKeys(): Promise<KeyInfo[]>;
   AssignKey(

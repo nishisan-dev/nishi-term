@@ -54,3 +54,6 @@ A fixture anuncia múltiplos tipos de chave. Com apenas a chave Ed25519 no arqui
 O cadastro usa confirmação de chave na primeira conexão, ligada à mesma sessão, sem autenticação antes do aceite. Chave divergente bloqueia. Caminho known_hosts externo é opcional e mantém modo estrito. Perfis antigos preservam o caminho; limpar em opções avançadas e reabrir aba ativa o gerenciamento. Ver [HOST_TRUST.md](HOST_TRUST.md).
 
 Cofre inicial implementado com senha mestra própria, sem admin, Argon2id/AES-256-GCM, gravação criptografada explícita, bloqueio manual e após 5 minutos sem uso. Perfis não contêm segredos; resolução ocorre no backend com vínculo ao destino. Ver uso, limites e gates pendentes em [CREDENTIALS.md](CREDENTIALS.md). Estas decisões substituem as restrições históricas de senha apenas/arquivo obrigatório/cofre futuro.
+
+- RTT ICMP não representa disponibilidade: firewalls e política local podem impedir resposta. Sem fallback/elevacão; ocultar texto em falhas. Validar loopback v4/v6 nas duas plataformas, cancelamento, concorrência, expiração e independência do estado SSH.
+- Preferência de cofre inicia conexão ao abrir: preservar confirmação de identidade, desbloqueio/2FA, limite de sessões e cancelamento. Testar perfis antigos, caminho de chave e cópias de perfis em abas abertas. Ver CONNECTION_WORKFLOW.md.

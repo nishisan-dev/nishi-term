@@ -15,3 +15,5 @@
 Não tratar fase 1 como produto pronto. Não implementar fases posteriores antes de avaliar os resultados. A navegação SFTP foi autorizada e implementada como fase 3C. Transferências e métricas seguem para a fase 4, após definir operações e plataformas. Túneis, broadcast, sincronização e plugins continuam sem requisito confirmado.
 
 Incremento implementado: chaves gerenciadas e conexão por grupo ([MANAGED_KEYS.md](MANAGED_KEYS.md)). Pendentes: validação nativa, backup/exportação do cofre, revogação e gestão de ciclo de vida de chaves.
+
+Incremento de usabilidade: preferências de autenticação no cadastro, menu de contexto do grupo e RTT ICMP opcional ([CONNECTION_WORKFLOW.md](CONNECTION_WORKFLOW.md)). Ensaio nativo do fluxo e ICMP com usuário comum no Windows permanece pendente.

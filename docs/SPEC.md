@@ -76,3 +76,7 @@ Gerador Ed25519 protegido pelo cofre, chave privada somente no backend, associa�
 ## 2FA do cofre
 
 2FA TOTP opcional, cadastro local confirmado, códigos de recuperação e desbloqueio validado no backend. Limitações offline, formato v2, recuperação e testes: [VAULT_2FA.md](VAULT_2FA.md).
+
+### Preferência de autenticação e RTT
+
+O perfil define usuário e modo: pedir senha sempre, chave privada local ou credencial do cofre. A abertura de perfil de cofre solicita desbloqueio quando necessário. Ação de conectar grupo fica no menu de contexto. RTT ICMP opcional a cada 10 s aparece apenas quando há resposta, sem indicar estado/disponibilidade. Ver [CONNECTION_WORKFLOW.md](CONNECTION_WORKFLOW.md).

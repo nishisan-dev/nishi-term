@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"nishiterm/internal/credentials"
+	"nishiterm/internal/latency"
 	"nishiterm/internal/profiles"
 	"nishiterm/internal/sshengine"
 	"nishiterm/internal/vault"
@@ -12,6 +13,7 @@ import (
 )
 
 type App struct {
+	latency     *latency.Monitor
 	vault       *vault.Store
 	credentials *credentials.Service
 	engine      *sshengine.Manager
@@ -23,6 +25,7 @@ func NewApp() *App {
 	if dir, e := os.UserConfigDir(); e == nil {
 		a.engine = sshengine.NewManagerWithTrust(filepath.Join(dir, "NishiTerm", "trusted-hosts.json"))
 		a.profiles = profiles.New(filepath.Join(dir, "NishiTerm", "profiles.json"))
+		a.latency = latency.New(a.profiles.List)
 		a.vault = vault.New(filepath.Join(dir, "NishiTerm", "vault.json"))
 		a.credentials = &credentials.Service{Profiles: a.profiles, Vault: a.vault}
 	}
@@ -47,7 +50,21 @@ func (a *App) DeleteProfile(id string) ([]profiles.Profile, error) {
 	return a.profiles.Delete(id)
 }
 
+func (a *App) startup(ctx context.Context) {
+	if a.latency != nil {
+		a.latency.Start(ctx)
+	}
+}
+func (a *App) HostLatencies() map[string]latency.Sample {
+	if a.latency == nil {
+		return map[string]latency.Sample{}
+	}
+	return a.latency.Snapshot()
+}
 func (a *App) shutdown(context.Context) {
+	if a.latency != nil {
+		a.latency.Close()
+	}
 	a.engine.Shutdown()
 	if a.vault != nil {
 		a.vault.Lock()

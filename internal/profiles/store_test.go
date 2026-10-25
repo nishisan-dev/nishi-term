@@ -108,3 +108,35 @@ func TestRejectInvalidProfileWithoutWriting(t *testing.T) {
 		t.Fatal("invalid save created file")
 	}
 }
+
+func TestAuthenticationPreferences(t *testing.T) {
+	for _, method := range []string{"", "password", "vault", "key"} {
+		t.Run(method, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "profiles.json")
+			s := New(path)
+			p := valid()
+			p.AuthMethod = method
+			if method == "key" {
+				p.PrivateKeyPath = "/home/test/.ssh/id_ed25519"
+			}
+			saved, err := s.Save(p)
+			if err != nil {
+				t.Fatal(err)
+			}
+			loaded, err := New(path).List()
+			if err != nil || loaded[0] != saved[0] {
+				t.Fatal("preference lost", err)
+			}
+		})
+	}
+	for _, p := range []Profile{
+		func() Profile { p := valid(); p.AuthMethod = "unknown"; return p }(),
+		func() Profile { p := valid(); p.AuthMethod = "key"; return p }(),
+		func() Profile { p := valid(); p.PrivateKeyPath = "/unexpected"; return p }(),
+		func() Profile { p := valid(); p.AuthMethod = "key"; p.PrivateKeyPath = "bad\npath"; return p }(),
+	} {
+		if _, err := New(filepath.Join(t.TempDir(), "profiles.json")).Save(p); err == nil {
+			t.Fatal("invalid preference accepted")
+		}
+	}
+}

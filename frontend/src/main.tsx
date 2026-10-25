@@ -8,6 +8,7 @@ import "./style.css";
 import { FactorInput, TwoFactorSettings } from "./two-factor";
 import { KeyManager, GroupConnect, VaultGate } from "./key-manager";
 import { FilesPanel } from "./files";
+import { GroupMenu, HostRTT, useLatencies } from "./sidebar-tools";
 import { afterPaint } from "./paint";
 
 const initialStatus: SessionStatus = {
@@ -149,7 +150,7 @@ function ProfileEditor({
     >
       <form onSubmit={save}>
         <p className="muted">
-          Organize o destino. A senha será solicitada ao conectar.
+          Defina o destino e como esta conexão deve autenticar.
         </p>
         <fieldset disabled={saving} className="form-grid">
           <label>
@@ -210,6 +211,43 @@ function ProfileEditor({
               autoComplete="off"
             />
           </label>
+          <label className="wide">
+            Autenticação do perfil
+            <select
+              value={draft.authMethod || "password"}
+              onChange={(e) =>
+                setDraft((p) => ({
+                  ...p,
+                  authMethod: e.target.value as "password" | "key" | "vault",
+                  privateKeyPath:
+                    e.target.value === "key" ? p.privateKeyPath || "" : "",
+                }))
+              }
+            >
+              <option value="password">Pedir senha sempre</option>
+              <option value="vault">Credencial do cofre</option>
+              <option value="key">Chave privada</option>
+            </select>
+          </label>
+          {draft.authMethod === "key" && (
+            <label className="wide">
+              Caminho da chave privada
+              <input
+                required
+                maxLength={4096}
+                value={draft.privateKeyPath || ""}
+                onChange={(e) => field("privateKeyPath", e.target.value)}
+                placeholder="Caminho completo no computador"
+              />
+            </label>
+          )}
+          <p className="hint wide">
+            {draft.authMethod === "vault"
+              ? "Ao abrir, usaremos a credencial associada ao host ou ao grupo. Se o cofre estiver trancado, pediremos seu desbloqueio."
+              : draft.authMethod === "key"
+                ? "Somente o caminho será salvo. A passphrase, se houver, será pedida ao conectar."
+                : "O usuário fica salvo. A senha será pedida a cada conexão."}
+          </p>
           <details className="wide" open={draft.knownHosts !== "" || undefined}>
             <summary>Opções avançadas de identidade</summary>
             <label>
@@ -441,7 +479,7 @@ function SessionPane({
     passphrase = useRef<HTMLInputElement>(null),
     privateKey = useRef<HTMLInputElement>(null);
   const [authMethod, setAuthMethod] = useState<"password" | "key" | "vault">(
-    tab.autoConnect ? "vault" : "password",
+    tab.autoConnect ? "vault" : tab.profile.authMethod || "password",
   );
   const [status, setStatus] = useState(initialStatus);
   const [showFiles, setShowFiles] = useState(false);
@@ -781,8 +819,8 @@ function SessionPane({
           </label>
           {authMethod === "vault" ? (
             <p>
-              Desbloqueie o cofre na barra lateral para usar a credencial salva
-              desta conexão.
+              Usaremos a credencial associada ao host ou ao grupo. Se
+              necessário, pediremos o desbloqueio do cofre ao conectar.
             </p>
           ) : authMethod === "key" ? (
             <>
@@ -790,6 +828,7 @@ function SessionPane({
                 Arquivo da chave privada
                 <input
                   ref={privateKey}
+                  defaultValue={tab.profile.privateKeyPath || ""}
                   required
                   maxLength={4096}
                   autoComplete="off"
@@ -888,6 +927,13 @@ function App() {
     } | null>(null),
     [deleting, setDeleting] = useState(false);
   const [sidebar, setSidebar] = useState(true);
+  const latencies = useLatencies();
+  const [groupMenu, setGroupMenu] = useState<{
+    group: string;
+    x: number;
+    y: number;
+    trigger: HTMLElement;
+  } | null>(null);
   const [keysOpen, setKeysOpen] = useState(false);
   const [connectGroup, setConnectGroup] = useState<string | null>(null);
   async function startGroup(members: Profile[]) {
@@ -1018,7 +1064,15 @@ function App() {
   );
   function open(p: Profile) {
     const id = crypto.randomUUID();
-    setTabs((ts) => [...ts, { id, profile: { ...p }, status: initialStatus }]);
+    setTabs((ts) => [
+      ...ts,
+      {
+        id,
+        profile: { ...p },
+        status: initialStatus,
+        autoConnect: p.authMethod === "vault",
+      },
+    ]);
     setSelected(id);
     setSearch(false);
     setError("");
@@ -1136,19 +1190,40 @@ function App() {
           )}
           {groups.map((group) => (
             <details key={group} open>
-              <summary>
+              <summary
+                aria-haspopup="menu"
+                onContextMenu={(e) => {
+                  e.preventDefault();
+                  setGroupMenu({
+                    group,
+                    x: e.clientX,
+                    y: e.clientY,
+                    trigger: e.currentTarget,
+                  });
+                }}
+                onKeyDown={(e) => {
+                  if (
+                    e.key === "ContextMenu" ||
+                    (e.shiftKey && e.key === "F10")
+                  ) {
+                    e.preventDefault();
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setGroupMenu({
+                      group,
+                      x: r.left,
+                      y: r.bottom,
+                      trigger: e.currentTarget,
+                    });
+                  }
+                }}
+              >
                 <Icon name="folder" />
                 {group || "Sem grupo"}
                 <span className="count">
                   {profiles.filter((p) => p.group === group).length}
                 </span>
               </summary>
-              <button
-                className="secondary compact group-connect"
-                onClick={() => setConnectGroup(group)}
-              >
-                Conectar grupo {group || "Sem grupo"}
-              </button>
+
               <div className="group-items">
                 {profiles
                   .filter((p) => p.group === group)
@@ -1160,11 +1235,13 @@ function App() {
                     >
                       <button
                         className="profile-open"
+                        aria-label={p.name}
                         onClick={() => open(p)}
                         title={`${p.user}@${p.host}:${p.port}`}
                       >
                         <Icon name="server" />
                         <span>{p.name}</span>
+                        <HostRTT sample={latencies[p.host]} />
                       </button>
                       <button
                         className="icon-button"
@@ -1192,6 +1269,16 @@ function App() {
             </details>
           ))}
         </div>
+        {groupMenu && (
+          <GroupMenu
+            menu={groupMenu}
+            onClose={() => setGroupMenu(null)}
+            onConnect={() => {
+              setConnectGroup(groupMenu.group);
+              setGroupMenu(null);
+            }}
+          />
+        )}
         <div className="sidebar-note">
           <button className="secondary" onClick={() => setKeysOpen(true)}>
             Chaves SSH
