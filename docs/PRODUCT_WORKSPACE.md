@@ -32,4 +32,4 @@ As evidências Windows anteriores validam a PoC anterior e o motor. A nova UI ai
 
 ## Próximo recorte
 
-Consolidar o uso diário desta área de trabalho e validar a nova integração Windows antes de distribuição. Projetar autenticação por chave/agent e proteção de credenciais como etapa 3B própria. SFTP, métricas e cofre ainda não foram implementados; não há dados fictícios desses recursos na interface do produto.
+Consolidar o uso diário desta área de trabalho e validar a nova integração Windows antes de distribuição. Autenticação por arquivo de chave já está disponível; o próximo recorte de credenciais é implementar o cofre autenticado conforme CREDENTIALS.md. Agent continua futuro. SFTP, métricas e cofre ainda não foram implementados; não há dados fictícios desses recursos na interface do produto.

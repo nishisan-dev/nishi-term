@@ -15,7 +15,7 @@ Validar uma sessão SSH interativa em janela nativa com PTY remoto, teclado, red
 | ID | Requisito | Critério de aceitação |
 |---|---|---|
 | F01 | Conectar a host, porta e usuário explicitamente informados | Sessão autenticada e shell PTY xterm-256color |
-| F02 | Autenticação por senha efêmera nesta PoC | Senha limpa do formulário ao enviar; sem persistência, telemetria ou logs de conteúdo |
+| F02 | Autenticação efêmera por senha ou chave | Senha limpa do formulário ao enviar; sem persistência, telemetria ou logs de conteúdo |
 | F03 | Verificação estrita de host | Arquivo known_hosts existente; host desconhecido, alterado ou revogado falha antes de autenticação; sem aceite automático |
 | F04 | Terminal interativo | ANSI, Unicode fragmentado, Ctrl-C e resize; saída entregue como bytes ao xterm |
 | F05 | Backpressure ponta a ponta | Fila de saída limitada; próximo lote somente após callback de processamento do xterm; sem descarte silencioso |
@@ -27,7 +27,7 @@ Validar uma sessão SSH interativa em janela nativa com PTY remoto, teclado, red
 
 ## Limites deliberados
 
-PoC: senha apenas, known_hosts provisionado fora da aplicação por canal confiável, sem reconexão automática, retomada, agent forwarding, transferência de arquivos, plugins ou armazenamento de segredos. Nova conexão é nova sessão; não repetir comandos automaticamente após falhas. A existência de uma chave coletada por ssh-keyscan não comprova sua autenticidade.
+Versão atual: senha ou arquivo de chave privada (passphrase opcional), known_hosts provisionado fora da aplicação por canal confiável, sem reconexão automática, retomada, agent forwarding, transferência de arquivos, plugins ou armazenamento de segredos. Nova conexão é nova sessão; não repetir comandos automaticamente após falhas. A existência de uma chave coletada por ssh-keyscan não comprova sua autenticidade.
 
 Metas iniciais para validação, não medições já obtidas: saída em blocos de até 16 KiB, oito blocos na fila e um bloco pendente de confirmação por sessão; entrada em oito blocos de até 4 KiB; scrollback de 2.000 linhas. Considerar separadamente buffers SSH, serialização base64 (+33%), WebView e renderizador. Conexão/handshake/abertura de PTY com prazo total de 15 s; keepalive a cada 10 s, resposta em até 5 s; fechar transporte para desbloquear operações. Poll de saída com espera máxima de 200 ms. Cancelamento deve liberar recursos em até 2 s nos testes locais.
 

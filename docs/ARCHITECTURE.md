@@ -23,7 +23,7 @@ O motor é proprietário de conexões, contextos, canais, estados e limites. O a
 - Estados: connecting → open → draining → closed/failed. Erro na conexão: connecting → failed. Fechamento solicitado cancela qualquer estado e remove sessão do manager. Sessões terminadas retêm saída até ACK/drenagem; usuário deve fechar para liberar slot. O shutdown fecha todas.
 - ID aleatório por sessão evita que respostas antigas sejam aplicadas a nova conexão. React usa geração de conexão e cleanup para interromper polls/listeners antigos. Backend limita quatro sessões; interface atual permite quatro abas.
 - Prazo total de conexão cobre TCP, handshake, canal, PTY e shell. Contexto cancelado fecha TCP. Keepalive termina sessões sem resposta. Resize tem validação e serialização; chamadas bloqueadas são liberadas quando transporte encerra.
-- Senha existe apenas transitoriamente no formulário, na chamada Wails e no handshake. Sem logs de terminal, senha ou DTO completo. known_hosts é somente leitura. Erros públicos são categorias genéricas; nunca encaminhar texto remoto de autenticação.
+- Senha/passphrase existem apenas transitoriamente no formulário, na chamada Wails e no handshake. Sem logs de terminal, senha ou DTO completo. known_hosts é somente leitura. Erros públicos são categorias genéricas; nunca encaminhar texto remoto de autenticação.
 
 ## Evolução prevista
 
