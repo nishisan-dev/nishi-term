@@ -465,7 +465,7 @@ test("key authentication clears passphrase and never saves credentials", async (
   await page.setViewportSize({ width: 800, height: 540 });
   await expect(
     page.getByRole("button", { name: "Conectar", exact: true }),
-  ).toBeInViewport();
+  ).toBeInViewport({ ratio: 1 });
   await page.screenshot({
     path: path.resolve("../docs/evidence/product-ui/key-auth-fixture.png"),
   });
