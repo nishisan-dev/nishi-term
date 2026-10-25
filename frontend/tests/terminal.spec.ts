@@ -537,6 +537,17 @@ test("vault create, explicit save, lock, unlock and use without exposing secrets
     .click();
   await page
     .getByLabel("Senha mestra", { exact: true })
+    .fill("incorrect-master");
+  await page.getByRole("button", { name: "Desbloquear", exact: true }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "não foi possível desbloquear",
+  );
+  await expect(page.getByLabel("Senha mestra", { exact: true })).toHaveValue(
+    "",
+  );
+
+  await page
+    .getByLabel("Senha mestra", { exact: true })
     .fill("fixture-master-password");
   await page.getByRole("button", { name: "Desbloquear", exact: true }).click();
   await page.getByRole("button", { name: "Conectar", exact: true }).click();

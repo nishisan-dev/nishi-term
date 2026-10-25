@@ -251,11 +251,16 @@ function VaultControls() {
     [error, setError] = useState("");
   const master = useRef<HTMLInputElement>(null),
     repeat = useRef<HTMLInputElement>(null);
+  const polling = useRef(false);
   const refresh = useCallback(async () => {
+    if (polling.current) return;
+    polling.current = true;
     try {
       setStatus(await api().VaultStatus());
     } catch {
       setStatus(null);
+    } finally {
+      polling.current = false;
     }
   }, []);
   useEffect(() => {
