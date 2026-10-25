@@ -86,6 +86,9 @@ async function bridge(page: Page, mode = "stream") {
               return m.profiles;
             },
             Start: async (c: any) => {
+              m.progressAtStart = !!document
+                .querySelector(".connection-progress")
+                ?.textContent?.includes("Conectando…");
               m.auth = {
                 method: c.authMethod,
                 path: c.privateKeyPath,
@@ -202,6 +205,9 @@ test("closing a tab during pending Start closes the late session without polling
   await bridge(page, "pending");
   await page.goto("/");
   await open(page);
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).mock.finishStart))
+    .toBe("function");
   await page.getByRole("button", { name: "Fechar aba Alpha" }).click();
   await page.getByRole("button", { name: "Encerrar e fechar" }).click();
   await page.evaluate(() => (window as any).mock.finishStart());
@@ -556,4 +562,40 @@ test("vault create, explicit save, lock, unlock and use without exposing secrets
     false,
   );
   expect(await page.evaluate(() => localStorage.length)).toBe(0);
+});
+
+test("connection feedback is rendered before Start and cancellation stays available", async ({
+  page,
+}) => {
+  await bridge(page, "pending");
+  await page.goto("/");
+  await open(page);
+  await expect
+    .poll(() => page.evaluate(() => typeof (window as any).mock.finishStart))
+    .toBe("function");
+  expect(await page.evaluate(() => (window as any).mock.progressAtStart)).toBe(
+    true,
+  );
+  await expect(page.locator(".connection-progress")).toContainText(
+    "Conectando…",
+  );
+  await expect(page.locator(".spinner")).toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Conectar", exact: true }),
+  ).toHaveCount(0);
+  await page.screenshot({
+    path: path.resolve("../docs/evidence/product-ui/connecting-fixture.png"),
+  });
+  await page
+    .getByRole("button", { name: "Cancelar conexão", exact: true })
+    .click();
+  await expect(page.locator(".connection-progress")).not.toBeVisible();
+  await expect(
+    page.getByRole("button", { name: "Conectar", exact: true }),
+  ).toBeVisible();
+  await page.evaluate(() => (window as any).mock.finishStart());
+  await expect
+    .poll(() => page.evaluate(() => (window as any).mock.closes))
+    .toEqual(["session-1"]);
+  expect(await page.evaluate(() => (window as any).mock.polls)).toEqual([]);
 });

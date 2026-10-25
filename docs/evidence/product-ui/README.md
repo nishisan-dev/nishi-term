@@ -33,3 +33,7 @@ Captura adicional do fluxo de chave com bridge simulado. A mensagem de erro é p
 ![Criação do cofre simulado](vault-fixture.png)
 
 Ambas as imagens usam bridge simulado, sem host real ou credencial preenchida.
+
+## Conexão em andamento
+
+![Feedback de conexão com bridge pendente simulado](connecting-fixture.png)

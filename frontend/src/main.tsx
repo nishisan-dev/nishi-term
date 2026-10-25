@@ -5,6 +5,7 @@ import { api, type Profile, type Config, type VaultStatus } from "./bridge";
 import { TerminalSession, stateLabels, type SessionStatus } from "./session";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
+import { afterPaint } from "./paint";
 
 const initialStatus: SessionStatus = {
   state: "idle",
@@ -423,6 +424,9 @@ function SessionPane({
     "password",
   );
   const [status, setStatus] = useState(initialStatus);
+  const [terminalReady, setTerminalReady] = useState(false);
+  const visibility = useRef(visible);
+  visibility.current = visible;
   const [savingCredential, setSavingCredential] = useState(false),
     [credentialMessage, setCredentialMessage] = useState("");
   const [confirmingTrust, setConfirmingTrust] = useState(false);
@@ -431,15 +435,23 @@ function SessionPane({
   }, [status.trust?.token]);
   const busy = ["connecting", "open", "draining"].includes(status.state);
   useEffect(() => {
-    const c = new TerminalSession(mount.current!, (s) => {
-      setStatus(s);
-      onStatus(tab.id, s);
+    let cancelled = false;
+    let instance: TerminalSession | null = null;
+    setTerminalReady(false);
+    void afterPaint().then(() => {
+      if (cancelled) return;
+      instance = new TerminalSession(mount.current!, (s) => {
+        setStatus(s);
+        onStatus(tab.id, s);
+      });
+      controller.current = instance;
+      instance.setVisible(visibility.current);
+      setTerminalReady(true);
     });
-    controller.current = c;
-    c.setVisible(visible);
     return () => {
+      cancelled = true;
       controller.current = null;
-      c.dispose();
+      instance?.dispose();
     };
   }, [tab.id, onStatus]);
   useEffect(() => {
@@ -564,7 +576,32 @@ function SessionPane({
           </button>
         )}
       </div>
-      {!busy && (
+      {(!terminalReady || status.state === "connecting") && (
+        <div
+          className="connection-progress"
+          aria-live="polite"
+          aria-busy="true"
+        >
+          <span className="spinner" aria-hidden="true" />
+          <div>
+            <strong>
+              {!terminalReady
+                ? "Preparando terminal…"
+                : status.trust
+                  ? "Aguardando confirmação da identidade…"
+                  : "Conectando…"}
+            </strong>
+            <p>
+              {!terminalReady
+                ? "Abrindo sua área de trabalho."
+                : status.trust
+                  ? "Confira a impressão digital para continuar."
+                  : `Estabelecendo uma sessão com ${tab.profile.host}. Você pode cancelar a conexão.`}
+            </p>
+          </div>
+        </div>
+      )}
+      {!busy && terminalReady && (
         <form className="auth-card" onSubmit={connect}>
           <div>
             <h2>
@@ -623,9 +660,6 @@ function SessionPane({
               />
             </label>
           )}
-          <button type="submit" disabled={savingCredential}>
-            Conectar <span aria-hidden="true">→</span>
-          </button>
           <div className="credential-actions">
             {authMethod !== "vault" ? (
               <button
@@ -653,8 +687,15 @@ function SessionPane({
                 Remover credencial do cofre
               </button>
             )}
-            {credentialMessage && <p role="status">{credentialMessage}</p>}
+            <button type="submit" disabled={savingCredential}>
+              Conectar <span aria-hidden="true">→</span>
+            </button>
           </div>
+          {credentialMessage && (
+            <p className="credential-feedback" role="status">
+              {credentialMessage}
+            </p>
+          )}
           <p className="trust-note">
             Verificação de identidade:{" "}
             <span title={tab.profile.knownHosts}>

@@ -21,3 +21,7 @@ O cadastro usa confirmação de chave na primeira conexão, ligada à mesma sess
 Cofre inicial implementado com senha mestra própria, sem admin, Argon2id/AES-256-GCM, gravação criptografada explícita, bloqueio manual e após 5 minutos sem uso. Perfis não contêm segredos; resolução ocorre no backend com vínculo ao destino. Ver uso, limites e gates pendentes em [CREDENTIALS.md](CREDENTIALS.md). Estas decisões substituem as restrições históricas de senha apenas/arquivo obrigatório/cofre futuro.
 
 Nesta etapa, a suíte de interface passou com 12 testes. As suítes internas passaram com race detector, incluindo hosttrust, vault e credentials. Vet interno/Windows e crossbuild local passaram. Capturas de confirmação/cofre são fixtures de browser; a execução nativa deste novo fluxo ainda requer ensaio do usuário.
+
+## Feedback ao abrir e conectar
+
+A interface mostra preparação do terminal e progresso de conexão antes de inicialização/reset e chamada Start. Um teste com Start pendente verifica que o indicador já existe ao entrar no bridge, que cancelar continua disponível e que uma resposta tardia é encerrada sem Poll. O formulário tem controles de mesma altura e ações alinhadas; a animação respeita redução de movimento. Capturas usam bridge simulado. O relato do usuário motivou a mudança; não foi medido ganho de latência de rede.

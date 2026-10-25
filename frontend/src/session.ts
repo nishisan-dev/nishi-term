@@ -1,4 +1,5 @@
 import { Terminal } from "@xterm/xterm";
+import { afterPaint } from "./paint";
 import { FitAddon } from "@xterm/addon-fit";
 import { api, type Config, type HostChallenge } from "./bridge";
 
@@ -194,9 +195,11 @@ export class TerminalSession {
     const gen = ++this.generation;
     this.status = "connecting";
     this.error = "";
-    this.terminal.reset();
     this.publish();
     try {
+      await afterPaint();
+      if (!this.current(gen)) return;
+      this.terminal.reset();
       let pending: Promise<string>;
       try {
         pending = api().Start(c);
@@ -266,6 +269,9 @@ export class TerminalSession {
               : "Falha na conexão SSH.",
         );
       }
+    } finally {
+      c.password = "";
+      c.passphrase = "";
     }
   }
   async confirmHost(token: string) {
