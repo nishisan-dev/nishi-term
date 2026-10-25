@@ -17,15 +17,17 @@ import (
 	"testing"
 	"time"
 
+	"github.com/pkg/sftp"
 	"golang.org/x/crypto/ssh"
 	"golang.org/x/crypto/ssh/knownhosts"
 )
 
 type fixture struct {
-	config Config
-	key    ssh.Signer
-	auth   atomic.Int32
-	resize chan [2]uint32
+	config      Config
+	key         ssh.Signer
+	auth        atomic.Int32
+	resize      chan [2]uint32
+	sftpStarted atomic.Bool
 }
 
 func signer(t *testing.T) ssh.Signer {
@@ -41,6 +43,9 @@ func signer(t *testing.T) ssh.Signer {
 	return s
 }
 func server(t *testing.T, payload []byte, exit uint32, allowedKeys ...ssh.PublicKey) *fixture {
+	return serverWithFiles(t, payload, exit, "", allowedKeys...)
+}
+func serverWithFiles(t *testing.T, payload []byte, exit uint32, root string, allowedKeys ...ssh.PublicKey) *fixture {
 	t.Helper()
 	f := &fixture{key: signer(t), resize: make(chan [2]uint32, 8)}
 	listener, e := net.Listen("tcp", "127.0.0.1:0")
@@ -113,6 +118,25 @@ func server(t *testing.T, payload []byte, exit uint32, allowedKeys ...ssh.Public
 						defer ch.Close()
 						for r := range reqs {
 							switch r.Type {
+							case "subsystem":
+								f.sftpStarted.Store(true)
+								var request struct{ Name string }
+								_ = ssh.Unmarshal(r.Payload, &request)
+								if root == "stall" {
+									continue
+								}
+								if root == "" || request.Name != "sftp" {
+									_ = r.Reply(false, nil)
+									continue
+								}
+								_ = r.Reply(true, nil)
+								server, err := sftp.NewServer(ch, sftp.WithServerWorkingDirectory(root), sftp.ReadOnly())
+								if err != nil {
+									return
+								}
+								_ = server.Serve()
+								_ = server.Close()
+								return
 							case "pty-req":
 								_ = r.Reply(true, nil)
 							case "window-change":

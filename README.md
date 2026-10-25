@@ -12,7 +12,7 @@ Cliente de terminal SSH desktop em desenvolvimento em Go + Wails v2 estável + R
 - [Validação e limitações](docs/TESTING.md)
 - [Instruções permanentes](AGENTS.md)
 
-O mockup foi recebido e está documentado em [UI_REFERENCE.md](docs/UI_REFERENCE.md). A conversa anexada ainda não disponibilizou seu conteúdo completo. A interface atual inclui perfis agrupados, busca Ctrl+K e abas independentes com até 16 sessões ativas ou conectando. O cofre inicial está disponível; SFTP e métricas são futuros. Veja o [guia da área de trabalho](docs/PRODUCT_WORKSPACE.md).
+O mockup foi recebido e está documentado em [UI_REFERENCE.md](docs/UI_REFERENCE.md). A conversa anexada ainda não disponibilizou seu conteúdo completo. A interface atual inclui perfis agrupados, busca Ctrl+K e abas independentes com até 16 sessões ativas ou conectando. O cofre inicial está disponível; O navegador SFTP somente leitura está disponível; transferências e métricas são futuras. Veja o [guia da área de trabalho](docs/PRODUCT_WORKSPACE.md).
 
 ## Pré-requisitos
 
@@ -80,3 +80,5 @@ Veja [CONTRIBUTING.md](CONTRIBUTING.md) para contribuir. Relatórios e roteiros 
 Veja [identidades gerenciadas](docs/HOST_TRUST.md) e [cofre com senha mestra](docs/CREDENTIALS.md). O cofre é uma implementação inicial com testes automatizados; os gates de revisão/validação nativa estão documentados.
 
 Capacidade atual e evidências de carga: [16 sessões](docs/SESSION_CAPACITY.md).
+
+Nova etapa: [arquivos remotos SFTP](docs/SFTP.md) e [roteiro de revisão](docs/MORNING_REVIEW.md). O botão **Abas (N)** permite localizar, reordenar e fechar grupos com confirmação.

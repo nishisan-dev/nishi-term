@@ -107,3 +107,8 @@ func (a *App) DeleteCredential(id string) error {
 }
 
 func (a *App) SessionUsage() int { return a.engine.ActiveCount() }
+
+func (a *App) ListFiles(id, path string) (sshengine.Directory, error) {
+	return a.engine.ListFiles(id, path)
+}
+func (a *App) CancelFiles(id string) { a.engine.CancelFiles(id) }

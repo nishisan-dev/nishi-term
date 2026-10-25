@@ -64,3 +64,7 @@ Requisito permanente: cofre de senhas com autenticação explícita para desbloq
 O cadastro usa confirmação de chave na primeira conexão, ligada à mesma sessão, sem autenticação antes do aceite. Chave divergente bloqueia. Caminho known_hosts externo é opcional e mantém modo estrito. Perfis antigos preservam o caminho; limpar em opções avançadas e reabrir aba ativa o gerenciamento. Ver [HOST_TRUST.md](HOST_TRUST.md).
 
 Cofre inicial implementado com senha mestra própria, sem admin, Argon2id/AES-256-GCM, gravação criptografada explícita, bloqueio manual e após 5 minutos sem uso. Perfis não contêm segredos; resolução ocorre no backend com vínculo ao destino. Ver uso, limites e gates pendentes em [CREDENTIALS.md](CREDENTIALS.md). Estas decisões substituem as restrições históricas de senha apenas/arquivo obrigatório/cofre futuro.
+
+## Incremento autorizado em 25/10/2026
+
+Organizador de abas com busca, reordenação sem reconectar e fechamento de grupos confirmado. Navegador SFTP somente leitura sob o terminal, caminho independente do shell, filtro e cancelamento. Até 2.000 entradas, 1 MiB por resposta e 15 segundos por operação; ver [SFTP.md](SFTP.md). Transferências e métricas permanecem pendentes.

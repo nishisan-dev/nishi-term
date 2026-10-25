@@ -34,7 +34,20 @@ export type Profile = {
   knownHosts: string;
 };
 export type VaultStatus = { exists: boolean; locked: boolean };
+export type RemoteDirectory = {
+  path: string;
+  entries: {
+    name: string;
+    size: number;
+    modified: number;
+    permissions: string;
+    directory: boolean;
+    symlink: boolean;
+  }[];
+};
 export interface Bridge {
+  ListFiles(id: string, path: string): Promise<RemoteDirectory>;
+  CancelFiles(id: string): Promise<void>;
   SessionUsage(): Promise<number>;
   VaultStatus(): Promise<VaultStatus>;
   CreateVault(master: string): Promise<void>;

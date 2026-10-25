@@ -948,3 +948,139 @@ details.wide summary {
     min-height: 0;
   }
 }
+
+/* Remote files share the workspace without displacing the terminal entirely. */
+.files-panel {
+  flex: 0 0 34%;
+  min-height: 160px;
+  max-height: 46%;
+  display: flex;
+  flex-direction: column;
+  border-top: 1px solid #294159;
+  background: #0e1926;
+  padding: 8px 12px;
+  gap: 6px;
+}
+.files-toolbar,
+.files-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+.files-toolbar strong {
+  white-space: nowrap;
+  font-size: 12px;
+}
+.files-toolbar small {
+  color: #67d8d0;
+  margin-left: 6px;
+  font-size: 10px;
+}
+.files-toolbar input {
+  flex: 1;
+  min-width: 60px;
+  padding: 6px 8px;
+}
+.files-info input {
+  width: 180px;
+  padding: 4px 8px;
+  font-size: 11px;
+}
+.files-info span {
+  font-size: 11px;
+  color: #8fa9bd;
+}
+.files-scroll {
+  overflow: auto;
+  min-height: 0;
+  flex: 1;
+}
+.files-panel table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+  font-size: 11px;
+}
+.files-panel th {
+  position: sticky;
+  top: 0;
+  background: #0a1420;
+  color: #91a9bd;
+  font-weight: 500;
+}
+.files-panel td,
+.files-panel th {
+  padding: 5px 8px;
+  white-space: nowrap;
+  border-bottom: 1px solid #182839;
+}
+.files-panel td:first-child {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.files-panel tr:hover {
+  background: #14283a;
+}
+.files-panel .file-link {
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: #7fdad5;
+  font-size: inherit;
+  text-align: left;
+}
+.files-panel .error {
+  margin: 0;
+  font-size: 11px;
+}
+.files-empty {
+  color: #8fa9bd;
+  font-size: 12px;
+}
+.tab-manager-list {
+  max-height: 45vh;
+  overflow: auto;
+  margin: 12px 0;
+}
+.tab-manager-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+.tab-choice {
+  flex: 1;
+  min-width: 0;
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.tab-choice small {
+  font-size: 11px;
+  color: #91a9bd;
+}
+.tab-group-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.group-confirm {
+  margin-top: 12px;
+  padding: 12px;
+  border: 1px solid #665538;
+  border-radius: 6px;
+}
+@media (max-width: 950px) {
+  .files-toolbar strong {
+    font-size: 0;
+  }
+  .files-toolbar small {
+    font-size: 11px;
+  }
+  .files-info input {
+    width: 140px;
+  }
+}

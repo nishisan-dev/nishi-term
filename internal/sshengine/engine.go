@@ -66,6 +66,9 @@ type session struct {
 	state, publicError string
 	transport          net.Conn
 	remote             *ssh.Session
+	client             *ssh.Client
+	filesMu            sync.Mutex
+	filesCancel        context.CancelFunc
 	out                chan []byte
 	input              chan []byte
 	pollMu             sync.Mutex
@@ -361,6 +364,7 @@ func (s *session) run(c Config, verify ssh.HostKeyCallback, trust *hosttrust.Sto
 	_ = conn.SetDeadline(time.Time{})
 	s.mu.Lock()
 	s.remote = remote
+	s.client = client
 	s.state = "open"
 	s.mu.Unlock()
 	workersCtx, stopWorkers := context.WithCancel(s.ctx)

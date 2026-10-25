@@ -19,6 +19,7 @@ export const stateLabels: Record<SessionState, string> = {
   failed: "Falhou",
 };
 export type SessionStatus = {
+  sessionId?: string;
   trust?: HostChallenge;
   state: SessionState;
   error: string;
@@ -90,6 +91,7 @@ export class TerminalSession {
   private publish() {
     if (this.disposed) return;
     const s = {
+      sessionId: this.id,
       trust: this.trust,
       state: this.status,
       error: this.error,

@@ -8,7 +8,8 @@
 | 3A — área de trabalho (implementada) | Estrutura visual, perfis/grupos, busca Ctrl+K e até 16 sessões ativas/conectando | Testes locais e crossbuild passaram; ensaio da nova UI no Windows pendente |
 | 3B.1 — CI e chave SSH | Testes/builds GitHub e chave privada com passphrase efêmera | Suítes locais/remotas e builds; ensaio visual nativo separado |
 | 3B.2 — identidades e cofre inicial implementados | Desbloqueio explícito sem admin, bloqueio e armazenamento criptografado; agent futuro | Testes automatizados; validação nativa e revisão independente pendentes conforme CREDENTIALS.md |
+| 3C — aproximação do mockup | Organizador de abas e navegador SFTP limitado, somente leitura | Testes SSH/SFTP locais e Chromium; ensaio nativo pendente (SFTP.md) |
 | 4 — MVP | Escopo funcional reconciliado com conversa e mockup; avaliar SFTP e métricas; acessibilidade, atalhos e estados | Aceitação funcional e visual; sem expansão especulativa de escopo |
 | 5 — distribuição | Portable, política WebView2, assinatura e pipeline reprodutível | Execução sem admin em máquina limpa e ambiente corporativo; rollback documentado |
 
-Não tratar fase 1 como produto pronto. Não implementar fases posteriores antes de avaliar os resultados. SFTP e métricas aparecem no mockup e são candidatos à fase 4, após definição das operações e plataformas suportadas. Túneis, broadcast, sincronização e plugins continuam sem requisito confirmado.
+Não tratar fase 1 como produto pronto. Não implementar fases posteriores antes de avaliar os resultados. A navegação SFTP foi autorizada e implementada como fase 3C. Transferências e métricas seguem para a fase 4, após definir operações e plataformas. Túneis, broadcast, sincronização e plugins continuam sem requisito confirmado.

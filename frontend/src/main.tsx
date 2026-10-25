@@ -5,6 +5,7 @@ import { api, type Profile, type Config, type VaultStatus } from "./bridge";
 import { TerminalSession, stateLabels, type SessionStatus } from "./session";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
+import { FilesPanel } from "./files";
 import { afterPaint } from "./paint";
 
 const initialStatus: SessionStatus = {
@@ -424,6 +425,7 @@ function SessionPane({
     "password",
   );
   const [status, setStatus] = useState(initialStatus);
+  const [showFiles, setShowFiles] = useState(false);
   const [terminalReady, setTerminalReady] = useState(false);
   const visibility = useRef(visible);
   visibility.current = visible;
@@ -567,6 +569,14 @@ function SessionPane({
           <i />
           {stateLabels[status.state]}
         </span>
+        <button
+          className="secondary compact"
+          disabled={status.state !== "open"}
+          aria-pressed={showFiles}
+          onClick={() => setShowFiles(!showFiles)}
+        >
+          SFTP
+        </button>
         {busy && (
           <button
             className="secondary compact"
@@ -710,6 +720,13 @@ function SessionPane({
         </div>
       )}
       <div className="terminal" ref={mount} />
+      {showFiles && visible && status.state === "open" && status.sessionId && (
+        <FilesPanel
+          key={status.sessionId}
+          id={status.sessionId}
+          onClose={() => setShowFiles(false)}
+        />
+      )}
     </section>
   );
 }
@@ -729,6 +746,31 @@ function App() {
     } | null>(null),
     [deleting, setDeleting] = useState(false);
   const [sidebar, setSidebar] = useState(true);
+  const [manageTabs, setManageTabs] = useState(false),
+    [tabQuery, setTabQuery] = useState("");
+  const [closeGroup, setCloseGroup] = useState<string | null>(null);
+  function moveTab(id: string, offset: number) {
+    setTabs((previous) => {
+      const result = [...previous],
+        index = result.findIndex((t) => t.id === id),
+        next = index + offset;
+      if (index < 0 || next < 0 || next >= result.length) return previous;
+      [result[index], result[next]] = [result[next], result[index]];
+      return result;
+    });
+  }
+  function removeGroup(group: string) {
+    const remaining = tabs.filter((t) => t.profile.group !== group);
+    setTabs(remaining);
+    if (!remaining.some((t) => t.id === selected))
+      setSelected(remaining[0]?.id ?? "");
+    setCloseGroup(null);
+  }
+  useEffect(() => {
+    document
+      .getElementById(`tab-${selected}`)
+      ?.scrollIntoView({ block: "nearest", inline: "nearest" });
+  }, [selected]);
   const [sessionUsage, setSessionUsage] = useState<number | null>(null);
   useEffect(() => {
     let disposed = false,
@@ -942,6 +984,89 @@ function App() {
         </div>
       </aside>
       <div className="workspace">
+        {manageTabs && (
+          <Modal title="Organizar abas" onClose={() => setManageTabs(false)}>
+            <input
+              autoFocus
+              aria-label="Localizar aba"
+              placeholder="Nome, grupo ou servidor…"
+              value={tabQuery}
+              onChange={(e) => setTabQuery(e.target.value)}
+            />
+            <div className="tab-manager-list">
+              {tabs
+                .filter((t) =>
+                  normalize(
+                    `${t.profile.name} ${t.profile.group} ${t.profile.host}`,
+                  ).includes(normalize(tabQuery)),
+                )
+                .map((t) => (
+                  <div className="tab-manager-row" key={t.id}>
+                    <button
+                      className="secondary tab-choice"
+                      onClick={() => {
+                        setSelected(t.id);
+                        setManageTabs(false);
+                      }}
+                    >
+                      <strong>{t.profile.name}</strong>
+                      <small>
+                        {t.profile.group} · {stateLabels[t.status.state]}
+                      </small>
+                    </button>
+                    <button
+                      className="secondary compact"
+                      aria-label={`Mover ${t.profile.name} para esquerda`}
+                      disabled={tabs[0]?.id === t.id}
+                      onClick={() => moveTab(t.id, -1)}
+                    >
+                      ←
+                    </button>
+                    <button
+                      className="secondary compact"
+                      aria-label={`Mover ${t.profile.name} para direita`}
+                      disabled={tabs[tabs.length - 1]?.id === t.id}
+                      onClick={() => moveTab(t.id, 1)}
+                    >
+                      →
+                    </button>
+                  </div>
+                ))}
+            </div>
+            <div className="tab-group-actions">
+              {[...new Set(tabs.map((t) => t.profile.group))].map((group) => (
+                <button
+                  key={group}
+                  className="secondary compact"
+                  onClick={() => setCloseGroup(group)}
+                >
+                  Fechar grupo {group}
+                </button>
+              ))}
+            </div>
+            {closeGroup !== null && (
+              <div className="group-confirm" role="alert">
+                <p>
+                  Fechar todas as abas de {closeGroup}? Conexões e leituras de
+                  arquivos em andamento serão interrompidas. Comandos já
+                  enviados não podem ser desfeitos.
+                </p>
+                <button
+                  className="secondary compact"
+                  onClick={() => setCloseGroup(null)}
+                >
+                  Manter abas
+                </button>{" "}
+                <button
+                  className="compact"
+                  onClick={() => removeGroup(closeGroup)}
+                >
+                  Confirmar fechamento do grupo
+                </button>
+              </div>
+            )}
+          </Modal>
+        )}
         <div className="tabs-bar">
           <button
             className="icon-button sidebar-toggle"
@@ -988,6 +1113,17 @@ function App() {
               </div>
             ))}
           </div>
+          <button
+            className="secondary compact"
+            disabled={!tabs.length}
+            onClick={() => {
+              setTabQuery("");
+              setCloseGroup(null);
+              setManageTabs(true);
+            }}
+          >
+            Abas ({tabs.length})
+          </button>
           <button
             className="icon-button new-tab"
             aria-label="Abrir conexão"

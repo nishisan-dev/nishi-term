@@ -44,6 +44,51 @@ async function bridge(page: Page, mode = "stream") {
       w.go = {
         main: {
           App: {
+            ListFiles: async (_id: string, target: string) => {
+              m.lastFileTarget = target;
+              if (target === "/missing") throw "Diretório indisponível";
+              if (target === "/slow")
+                return new Promise((_resolve, reject) => {
+                  m.cancelFile = () => reject("Leitura cancelada");
+                });
+              return {
+                path:
+                  target === "." || target.endsWith("/..")
+                    ? "/home/tester"
+                    : target,
+                entries: target.endsWith("/config")
+                  ? []
+                  : [
+                      {
+                        name: "config",
+                        directory: true,
+                        symlink: false,
+                        size: 0,
+                        modified: 1700000000,
+                        permissions: "drwxr-xr-x",
+                      },
+                      {
+                        name: "README.md",
+                        directory: false,
+                        symlink: false,
+                        size: 2048,
+                        modified: 1700000000,
+                        permissions: "-rw-r--r--",
+                      },
+                      {
+                        name: "<img src=x onerror=alert(1)>",
+                        directory: false,
+                        symlink: false,
+                        size: 12,
+                        modified: 1700000000,
+                        permissions: "-rw-------",
+                      },
+                    ],
+              };
+            },
+            CancelFiles: async () => {
+              m.cancelFile?.();
+            },
             SessionUsage: async () =>
               Object.values(sessions).filter((s) => !s.closed).length,
             VaultStatus: async () => ({ ...m.vault }),
@@ -631,4 +676,95 @@ test("sixteen live tabs, seventeenth rejected, disconnect frees capacity without
   ).toHaveText("Conectado");
   await expect(page.locator(".footer-right")).toContainText("16/16 sessões");
   await expect(page.getByRole("tab")).toHaveCount(17);
+});
+
+test("SFTP browse, filter, failure and cancellation keep terminal available", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await open(page);
+  await expect(page.locator(".connection-state")).toContainText("Conectado");
+  await page.getByRole("button", { name: "SFTP", exact: true }).click();
+  const files = page.getByRole("region", { name: "Arquivos remotos" });
+  await expect(files.getByText("README.md", { exact: true })).toBeVisible();
+  expect(await files.locator("img").count()).toBe(0);
+  await page.getByLabel("Filtrar arquivos").fill("readme");
+  await expect(files.locator("tbody tr")).toHaveCount(1);
+  await page.getByLabel("Filtrar arquivos").fill("");
+  await files.getByRole("button", { name: "▸ config", exact: true }).click();
+  await expect(page.getByLabel("Caminho remoto")).toHaveValue(
+    "/home/tester/config",
+  );
+  await expect(files.getByText("Nenhum arquivo encontrado.")).toBeVisible();
+  await page.getByRole("button", { name: "Diretório superior" }).click();
+  await expect(files.getByText("README.md", { exact: true })).toBeVisible();
+  await mkdir("../docs/evidence/product-ui", { recursive: true });
+  await expect(page.locator(".footer-right")).toContainText("1/16 sessões");
+  await page.screenshot({
+    path: "../docs/evidence/product-ui/sftp-fixture.png",
+  });
+  await page.setViewportSize({ width: 800, height: 540 });
+  await expect
+    .poll(() =>
+      page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    )
+    .toBe(true);
+  await page.screenshot({
+    path: "../docs/evidence/product-ui/sftp-compact-fixture.png",
+  });
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.getByLabel("Caminho remoto").fill("/missing");
+  await files.getByRole("button", { name: "Ir", exact: true }).click();
+  await expect(files.getByRole("alert")).toContainText(
+    "Diretório indisponível",
+  );
+  await page.getByLabel("Caminho remoto").fill("/slow");
+  await files.getByRole("button", { name: "Ir", exact: true }).click();
+  await expect(files.getByText("Carregando arquivos…")).toBeVisible();
+  await page.getByRole("button", { name: "Cancelar leitura" }).click();
+  await expect(files.getByRole("alert")).toContainText("cancelada");
+  await expect(page.locator(".connection-state")).toContainText("Conectado");
+  await page.getByRole("button", { name: "Ocultar arquivos" }).click();
+  await expect(files).toHaveCount(0);
+  await fitted(page);
+});
+
+test("organizer reorders live tabs without reconnecting and confirms group close", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await open(page);
+  await open(page, "Beta");
+  await page.getByRole("button", { name: "Abas (2)", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Mover Beta para esquerda", exact: true })
+    .click();
+  await page.getByLabel("Localizar aba").fill("alpha");
+  await expect(page.locator(".tab-manager-row")).toHaveCount(1);
+  await page.getByLabel("Localizar aba").fill("");
+  await page.screenshot({
+    path: "../docs/evidence/product-ui/tab-organizer-fixture.png",
+  });
+  await page.getByRole("button", { name: "Fechar diálogo" }).click();
+  await expect(page.getByRole("tab").first()).toContainText("Beta");
+  expect(await page.evaluate(() => (window as any).mock.next)).toBe(2);
+  await page.getByRole("button", { name: "Abas (2)", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Fechar grupo Laboratório", exact: true })
+    .click();
+  await page.getByRole("button", { name: "Manter abas", exact: true }).click();
+  expect(await page.evaluate(() => (window as any).mock.closes.length)).toBe(0);
+  await page
+    .getByRole("button", { name: "Fechar grupo Laboratório", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Confirmar fechamento do grupo", exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).mock.closes.length))
+    .toBe(2);
 });
