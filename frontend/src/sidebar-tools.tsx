@@ -79,8 +79,8 @@ export function GroupMenu({
       aria-label={`Ações de ${menu.group || "Sem grupo"}`}
       className="group-menu"
       style={{
-        left: Math.max(8, Math.min(menu.x, window.innerWidth - 208)),
-        top: Math.max(8, Math.min(menu.y, window.innerHeight - 64)),
+        left: Math.max(8, Math.min(menu.x, window.innerWidth - 162)),
+        top: Math.max(8, Math.min(menu.y, window.innerHeight - 46)),
       }}
       onKeyDown={(e) => {
         if (e.key === "Escape" || e.key === "Tab") {
