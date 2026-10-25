@@ -31,6 +31,7 @@ const (
 var ErrClosed = errors.New("sessão inexistente ou encerrada")
 
 type Config struct {
+	keyData         []byte
 	SavedCredential string `json:"savedCredential"`
 	Host            string `json:"host"`
 	Port            int    `json:"port"`
@@ -58,6 +59,8 @@ type Manager struct {
 	stopped  bool
 }
 type session struct {
+	host, user         string
+	port               int
 	trustChallenge     *HostChallenge
 	trustDecision      chan string
 	ctx                context.Context
@@ -82,11 +85,16 @@ func NewManager() *Manager {
 	return &Manager{sessions: make(map[string]*session), workers: make(map[*session]struct{})}
 }
 func dimensions(cols, rows int) bool { return cols > 0 && cols <= 1000 && rows > 0 && rows <= 1000 }
-func (m *Manager) Start(c Config) (string, error) {
+func (m *Manager) Start(c Config) (sessionID string, startError error) {
+	defer func() {
+		if startError != nil {
+			clear(c.keyData)
+		}
+	}()
 	if len(c.Host) > 253 || len(c.User) > 256 || len(c.Password) > 65536 || len(c.KnownHosts) > 4096 || strings.TrimSpace(c.Host) == "" || strings.ContainsAny(c.Host, "\x00\r\n") || c.Port < 1 || c.Port > 65535 || c.User == "" || !dimensions(c.Cols, c.Rows) {
 		return "", errors.New("parâmetros de conexão inválidos")
 	}
-	if c.SavedCredential != "" || (c.AuthMethod != "" && c.AuthMethod != "password" && c.AuthMethod != "key") || len(c.PrivateKeyPath) > 4096 || len(c.Passphrase) > 65536 || strings.ContainsAny(c.PrivateKeyPath, "\x00\r\n") || (c.AuthMethod == "key" && (strings.TrimSpace(c.PrivateKeyPath) == "" || c.Password != "")) || (c.AuthMethod != "key" && (c.PrivateKeyPath != "" || c.Passphrase != "")) {
+	if c.SavedCredential != "" || (c.AuthMethod != "" && c.AuthMethod != "password" && c.AuthMethod != "key") || len(c.PrivateKeyPath) > 4096 || len(c.Passphrase) > 65536 || strings.ContainsAny(c.PrivateKeyPath, "\x00\r\n") || (c.AuthMethod == "key" && ((strings.TrimSpace(c.PrivateKeyPath) == "" && len(c.keyData) == 0) || c.Password != "")) || (c.AuthMethod != "key" && (c.PrivateKeyPath != "" || c.Passphrase != "")) {
 		return "", errors.New("método de autenticação inválido")
 	}
 	var verify ssh.HostKeyCallback
@@ -119,7 +127,7 @@ func (m *Manager) Start(c Config) (string, error) {
 
 	id := rand.Text()
 	ctx, cancel := context.WithCancel(context.Background())
-	s := &session{done: make(chan struct{}), ctx: ctx, cancel: cancel, state: "connecting", out: make(chan []byte, QueueSize), input: make(chan []byte, QueueSize)}
+	s := &session{host: c.Host, user: c.User, port: c.Port, done: make(chan struct{}), ctx: ctx, cancel: cancel, state: "connecting", out: make(chan []byte, QueueSize), input: make(chan []byte, QueueSize)}
 	m.sessions[id] = s
 	m.workers[s] = struct{}{}
 	go func() {
@@ -294,6 +302,8 @@ func (s *session) run(c Config, verify ssh.HostKeyCallback, trust *hosttrust.Sto
 	defer close(s.done)
 	defer close(s.out)
 	auth, err := authentication(c)
+	clear(c.keyData)
+	c.keyData = nil
 	c.Password, c.Passphrase = "", ""
 	if err != nil {
 		s.fail(err.Error())

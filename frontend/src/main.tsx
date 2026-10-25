@@ -5,6 +5,7 @@ import { api, type Profile, type Config, type VaultStatus } from "./bridge";
 import { TerminalSession, stateLabels, type SessionStatus } from "./session";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
+import { KeyManager, GroupConnect, VaultGate } from "./key-manager";
 import { FilesPanel } from "./files";
 import { afterPaint } from "./paint";
 
@@ -23,7 +24,12 @@ const blank: Profile = {
   user: "",
   knownHosts: "",
 };
-type Tab = { id: string; profile: Profile; status: SessionStatus };
+type Tab = {
+  id: string;
+  profile: Profile;
+  status: SessionStatus;
+  autoConnect?: boolean;
+};
 const message = (e: unknown) =>
   typeof e === "string"
     ? e
@@ -422,7 +428,7 @@ function SessionPane({
     passphrase = useRef<HTMLInputElement>(null),
     privateKey = useRef<HTMLInputElement>(null);
   const [authMethod, setAuthMethod] = useState<"password" | "key" | "vault">(
-    "password",
+    tab.autoConnect ? "vault" : "password",
   );
   const [status, setStatus] = useState(initialStatus);
   const [showFiles, setShowFiles] = useState(false);
@@ -490,8 +496,8 @@ function SessionPane({
     keySecret = "";
     return config;
   }
-  async function connect(e: React.FormEvent) {
-    e.preventDefault();
+  async function connect(e?: React.FormEvent) {
+    e?.preventDefault();
     if (checkingVault.current || pendingConnection.current) return;
     setCredentialMessage("");
     const instance = controller.current;
@@ -548,6 +554,13 @@ function SessionPane({
       setUnlockBusy(false);
     }
   }
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (terminalReady && tab.autoConnect && !autoStarted.current) {
+      autoStarted.current = true;
+      void connect();
+    }
+  }, [terminalReady, tab.autoConnect]);
   async function saveCredential() {
     if (savingCredential) return;
     const c = takeConfig();
@@ -853,6 +866,35 @@ function App() {
     } | null>(null),
     [deleting, setDeleting] = useState(false);
   const [sidebar, setSidebar] = useState(true);
+  const [keysOpen, setKeysOpen] = useState(false);
+  const [connectGroup, setConnectGroup] = useState<string | null>(null);
+  async function startGroup(members: Profile[]) {
+    const existing = new Set(
+      tabs
+        .filter(
+          (t) =>
+            t.autoConnect ||
+            ["connecting", "open", "draining"].includes(t.status.state),
+        )
+        .map((t) => t.profile.id),
+    );
+    const pending = members.filter((p) => !existing.has(p.id));
+    if (!pending.length) throw "Todos os hosts deste grupo já estão ativos.";
+    const usage =
+      (await api().SessionUsage()) +
+      tabs.filter((t) => t.autoConnect && t.status.state === "idle").length;
+    if (pending.length > 16 - usage)
+      throw `São necessárias ${pending.length} vagas, mas há ${Math.max(0, 16 - usage)} disponíveis. Nenhuma nova sessão foi iniciada.`;
+    const additions = pending.map((profile) => ({
+      id: crypto.randomUUID(),
+      profile: { ...profile },
+      status: initialStatus,
+      autoConnect: true,
+    }));
+    setTabs((previous) => [...previous, ...additions]);
+    setSelected(additions[0].id);
+    setConnectGroup(null);
+  }
   const [manageTabs, setManageTabs] = useState(false),
     [tabQuery, setTabQuery] = useState("");
   const [closeGroup, setCloseGroup] = useState<string | null>(null);
@@ -939,7 +981,17 @@ function App() {
   }, [editing, confirm]);
   const status = useCallback(
     (id: string, s: SessionStatus) =>
-      setTabs((ts) => ts.map((t) => (t.id === id ? { ...t, status: s } : t))),
+      setTabs((ts) =>
+        ts.map((t) =>
+          t.id === id
+            ? {
+                ...t,
+                status: s,
+                autoConnect: s.state === "idle" ? t.autoConnect : false,
+              }
+            : t,
+        ),
+      ),
     [],
   );
   function open(p: Profile) {
@@ -993,6 +1045,33 @@ function App() {
   }
   return (
     <main className={`app ${sidebar ? "" : "sidebar-collapsed"}`}>
+      {keysOpen && (
+        <Modal title="Chaves SSH do cofre" onClose={() => setKeysOpen(false)}>
+          <VaultGate>
+            <KeyManager
+              profiles={profiles}
+              active={
+                active?.status.state === "open" && active.status.sessionId
+                  ? {
+                      sessionID: active.status.sessionId,
+                      profile: active.profile,
+                    }
+                  : undefined
+              }
+            />
+          </VaultGate>
+        </Modal>
+      )}
+      {connectGroup !== null && (
+        <Modal
+          title={`Conectar grupo ${connectGroup || "Sem grupo"}`}
+          onClose={() => setConnectGroup(null)}
+        >
+          <VaultGate>
+            <GroupConnect group={connectGroup} onConnect={startGroup} />
+          </VaultGate>
+        </Modal>
+      )}
       <header className="topbar">
         <div className="brand">
           <span className="brand-mark">
@@ -1042,6 +1121,12 @@ function App() {
                   {profiles.filter((p) => p.group === group).length}
                 </span>
               </summary>
+              <button
+                className="secondary compact group-connect"
+                onClick={() => setConnectGroup(group)}
+              >
+                Conectar grupo {group || "Sem grupo"}
+              </button>
               <div className="group-items">
                 {profiles
                   .filter((p) => p.group === group)
@@ -1086,6 +1171,9 @@ function App() {
           ))}
         </div>
         <div className="sidebar-note">
+          <button className="secondary" onClick={() => setKeysOpen(true)}>
+            Chaves SSH
+          </button>
           <VaultControls />
           <p>Salvar credenciais é opcional. O cofre exige sua senha mestra.</p>
         </div>

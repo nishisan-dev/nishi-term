@@ -1084,3 +1084,62 @@ details.wide summary {
     width: 140px;
   }
 }
+
+.key-manager {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 70vh;
+  overflow: auto;
+}
+.key-generate,
+.key-assignment {
+  display: flex;
+  align-items: end;
+  gap: 10px;
+}
+.key-generate label,
+.key-assignment label {
+  flex: 1;
+  min-width: 0;
+}
+.key-manager textarea {
+  width: 100%;
+  resize: vertical;
+  background: #0a1420;
+  color: #c2d6e6;
+  border: 1px solid #294159;
+  padding: 8px;
+  box-sizing: border-box;
+}
+.key-manager hr {
+  width: 100%;
+  border: 0;
+  border-top: 1px solid #294159;
+}
+.group-connect {
+  margin: 4px 12px;
+  max-width: calc(100% - 24px);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.group-coverage {
+  max-height: 35vh;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.8;
+}
+.sidebar-vault {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.key-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.key-fields[hidden] {
+  display: none;
+}

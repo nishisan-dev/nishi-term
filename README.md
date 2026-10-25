@@ -82,3 +82,5 @@ Veja [identidades gerenciadas](docs/HOST_TRUST.md) e [cofre com senha mestra](do
 Capacidade atual e evidências de carga: [16 sessões](docs/SESSION_CAPACITY.md).
 
 Nova etapa: [arquivos remotos SFTP](docs/SFTP.md) e [roteiro de revisão](docs/MORNING_REVIEW.md). O botão **Abas (N)** permite localizar, reordenar e fechar grupos com confirmação.
+
+[Chaves SSH gerenciadas](docs/MANAGED_KEYS.md): gere Ed25519 no cofre, associe a host/grupo, instale a chave pública em sessão POSIX autenticada e conecte grupos com cobertura completa, respeitando 16 sessões.

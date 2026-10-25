@@ -15,10 +15,24 @@ const maxPrivateKey = 1 << 20
 
 var errPrivateKey = errors.New("não foi possível abrir a chave: confira o arquivo, formato e passphrase")
 
+// WithPrivateKey injects vault bytes internally; the unexported field cannot be
+// supplied through Wails JSON. Ownership of data transfers to the SSH attempt.
+func WithPrivateKey(c Config, data []byte) Config { c.keyData = data; return c }
+
 // Keys remain backend-only. No fallback to passwords or agents is implicit.
 func authentication(c Config) (ssh.AuthMethod, error) {
 	if c.AuthMethod == "" || c.AuthMethod == "password" {
 		return ssh.Password(c.Password), nil
+	}
+	if len(c.keyData) > 0 {
+		if len(c.keyData) > 4096 || c.PrivateKeyPath != "" || c.Passphrase != "" {
+			return nil, errPrivateKey
+		}
+		signer, err := ssh.ParsePrivateKey(c.keyData)
+		if err != nil {
+			return nil, errPrivateKey
+		}
+		return ssh.PublicKeys(signer), nil
 	}
 	info, err := os.Stat(c.PrivateKeyPath)
 	if err != nil || !info.Mode().IsRegular() || info.Size() > maxPrivateKey {

@@ -49,14 +49,22 @@ func (s *Service) Resolve(c sshengine.Config) (sshengine.Config, error) {
 	if c.Host != p.Host || c.Port != p.Port || c.User != p.User || c.KnownHosts != p.KnownHosts {
 		return c, errors.New("perfil alterado: feche e reabra a aba")
 	}
-	secret, e := s.Vault.Get(p.ID)
+	secret, e := s.credential(p)
 	if e != nil {
 		return c, e
 	}
-	if secret.Host != p.Host || secret.Port != p.Port || secret.User != p.User {
+	if secret.Method != "group-key" && (secret.Host != p.Host || secret.Port != p.Port || secret.User != p.User) {
 		return c, errors.New("destino alterado: salve uma nova credencial para este perfil")
 	}
 	c.SavedCredential = ""
+	if secret.Method == "managed-key" || secret.Method == "group-key" {
+		key, err := s.Vault.Get(secret.KeyID)
+		if err != nil || key.Method != "identity" {
+			return c, errors.New("chave do cofre indisponível")
+		}
+		c.AuthMethod = "key"
+		return sshengine.WithPrivateKey(c, []byte(key.PrivateKey)), nil
+	}
 	c.AuthMethod = secret.Method
 	c.PrivateKeyPath = secret.KeyPath
 	c.Password = secret.Password

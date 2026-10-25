@@ -68,3 +68,7 @@ Cofre inicial implementado com senha mestra própria, sem admin, Argon2id/AES-25
 ## Navegação SFTP
 
 O motor abre um canal temporário sobre o cliente SSH autenticado, uma operação por sessão. Tempo, bytes e entradas são limitados; UI recebe somente metadados. Cancelamento normal encerra apenas o canal; a exceção na abertura bloqueada do canal está documentada em [SFTP.md](SFTP.md).
+
+## Chaves gerenciadas e grupos
+
+Gerador Ed25519 protegido pelo cofre, chave privada somente no backend, associação por host ou grupo com prioridade do host e instalação pública confirmada em sessão autenticada. Conectar grupo exige cobertura completa e capacidade disponível. Limites, compatibilidade do cofre e validação: [MANAGED_KEYS.md](MANAGED_KEYS.md).

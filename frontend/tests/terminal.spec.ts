@@ -35,6 +35,9 @@ async function bridge(page: Page, mode = "stream") {
         next: 0,
         vault: { exists: false, locked: true },
         savedCredentials: [] as string[],
+        keys: [] as any[],
+        assignments: [] as any[],
+        installations: [] as any[],
         confirmed: false,
       });
       const sessions: Record<
@@ -44,6 +47,51 @@ async function bridge(page: Page, mode = "stream") {
       w.go = {
         main: {
           App: {
+            ListKeys: async () => {
+              if (m.vault.locked) throw "cofre bloqueado";
+              return m.keys.map((key: any) => ({ ...key }));
+            },
+            GenerateKey: async (label: string) => {
+              const key = {
+                id: "key-" + (m.keys.length + 1),
+                label,
+                publicKey: "ssh-ed25519 AAAAfixture NishiTerm",
+                fingerprint: "SHA256:fixture-key",
+              };
+              m.keys.push(key);
+              return key;
+            },
+            AssignKey: async (
+              keyID: string,
+              profileID: string,
+              group: string,
+              toGroup: boolean,
+            ) => {
+              m.assignments.push({ keyID, profileID, group, toGroup });
+            },
+            InstallKey: async (
+              sessionID: string,
+              profileID: string,
+              keyID: string,
+            ) => {
+              m.installations.push({ sessionID, profileID, keyID });
+            },
+            GroupCoverage: async (group: string) => {
+              if (m.vault.locked) throw "cofre bloqueado";
+              return m.profiles
+                .filter((p: any) => p.group === group)
+                .map((profile: any) => ({
+                  profile,
+                  ready:
+                    m.savedCredentials.includes(profile.id) ||
+                    m.assignments.some(
+                      (a: any) =>
+                        (a.toGroup && a.group === group) ||
+                        a.profileID === profile.id,
+                    ),
+                  source: "host",
+                }));
+            },
             ListFiles: async (_id: string, target: string) => {
               m.lastFileTarget = target;
               if (target === "/missing") throw "Diretório indisponível";
@@ -773,4 +821,134 @@ test("organizer reorders live tabs without reconnecting and confirms group close
   await expect
     .poll(() => page.evaluate(() => (window as any).mock.closes.length))
     .toBe(2);
+});
+
+test("keys are generated, associated and installed only after explicit confirmations", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    (window as any).mock.vault = { exists: true, locked: false };
+  });
+  await open(page);
+  await expect(page.locator(".connection-state")).toHaveText("Conectado");
+  await page.getByRole("button", { name: "Chaves SSH", exact: true }).click();
+  await page.getByLabel("Nome da nova chave").fill("Lab shared");
+  await page
+    .getByRole("button", { name: "Gerar Ed25519", exact: true })
+    .click();
+  await expect(page.getByLabel("Chave pública")).toContainText("ssh-ed25519");
+  await page
+    .getByRole("combobox", { name: "Associar a", exact: true })
+    .selectOption("group");
+  await page
+    .getByRole("button", { name: "Associar chave", exact: true })
+    .click();
+  expect(
+    await page.evaluate(() => (window as any).mock.assignments.length),
+  ).toBe(0);
+  await page
+    .getByRole("button", { name: "Confirmar ação", exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).mock.assignments.length))
+    .toBe(1);
+  await page
+    .getByRole("button", {
+      name: "Instalar chave na sessão atual",
+      exact: true,
+    })
+    .click();
+  expect(
+    await page.evaluate(() => (window as any).mock.installations.length),
+  ).toBe(0);
+  await page.screenshot({
+    path: "../docs/evidence/product-ui/key-manager-fixture.png",
+  });
+  await page
+    .getByRole("button", { name: "Confirmar ação", exact: true })
+    .click();
+  await expect
+    .poll(() => page.evaluate(() => (window as any).mock.installations.length))
+    .toBe(1);
+  await expect(page.getByRole("dialog").getByRole("status")).toContainText(
+    "Chave pública instalada",
+  );
+  expect(await page.evaluate(() => localStorage.length)).toBe(0);
+});
+
+test("group connect unlocks once, requires complete coverage and avoids duplicate active hosts", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    const m = (window as any).mock;
+    m.vault = { exists: true, locked: true };
+    m.savedCredentials = ["a"];
+  });
+  await page
+    .getByRole("button", { name: "Conectar grupo Laboratório", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByLabel("Senha mestra", { exact: true })
+    .fill("fixture-master");
+  await page.getByRole("button", { name: "Desbloquear", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Conectar hosts do grupo", exact: true }),
+  ).toBeDisabled();
+  await expect(page.getByRole("dialog")).toContainText("1/2 hosts");
+  await page.getByRole("button", { name: "Fechar diálogo" }).click();
+  await page.evaluate(() => {
+    (window as any).mock.savedCredentials = ["a", "b"];
+  });
+  await page
+    .getByRole("button", { name: "Conectar grupo Laboratório", exact: true })
+    .click();
+  await expect(page.getByRole("dialog")).toContainText("2/2 hosts");
+  await page.screenshot({
+    path: "../docs/evidence/product-ui/group-connect-fixture.png",
+  });
+  await page
+    .getByRole("button", { name: "Conectar hosts do grupo", exact: true })
+    .click();
+  await expect(page.getByRole("tab")).toHaveCount(2);
+  await expect
+    .poll(() => page.evaluate(() => (window as any).mock.next))
+    .toBe(2);
+  await page
+    .getByRole("button", { name: "Conectar grupo Laboratório", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Conectar hosts do grupo", exact: true })
+    .click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "já estão ativos",
+  );
+  expect(await page.evaluate(() => (window as any).mock.next)).toBe(2);
+});
+
+test("group exceeding available capacity starts no sessions", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    const m = (window as any).mock;
+    m.vault = { exists: true, locked: false };
+    m.savedCredentials = ["a", "b"];
+    (window as any).go.main.App.SessionUsage = async () => 15;
+  });
+  await page
+    .getByRole("button", { name: "Conectar grupo Laboratório", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Conectar hosts do grupo", exact: true })
+    .click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "Nenhuma nova sessão foi iniciada",
+  );
+  expect(await page.evaluate(() => (window as any).mock.next)).toBe(0);
 });

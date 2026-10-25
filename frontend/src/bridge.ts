@@ -46,6 +46,20 @@ export type RemoteDirectory = {
   }[];
 };
 export interface Bridge {
+  GenerateKey(label: string): Promise<KeyInfo>;
+  ListKeys(): Promise<KeyInfo[]>;
+  AssignKey(
+    keyID: string,
+    profileID: string,
+    group: string,
+    toGroup: boolean,
+  ): Promise<void>;
+  GroupCoverage(group: string): Promise<Coverage[]>;
+  InstallKey(
+    sessionID: string,
+    profileID: string,
+    keyID: string,
+  ): Promise<void>;
   ListFiles(id: string, path: string): Promise<RemoteDirectory>;
   CancelFiles(id: string): Promise<void>;
   SessionUsage(): Promise<number>;
@@ -76,3 +90,11 @@ export function api(): Bridge {
   if (!bridge) throw new Error("Abra pelo aplicativo Wails para usar SSH.");
   return bridge;
 }
+
+export type KeyInfo = {
+  id: string;
+  label: string;
+  publicKey: string;
+  fingerprint: string;
+};
+export type Coverage = { profile: Profile; ready: boolean; source: string };

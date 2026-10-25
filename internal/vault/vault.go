@@ -27,6 +27,10 @@ const idle = 5 * time.Minute
 var aad = []byte("NishiTerm vault v1;argon2id:t3:m65536:p1;aes256gcm")
 
 type Credential struct {
+	KeyID      string `json:"keyID,omitempty"`
+	PrivateKey string `json:"privateKey,omitempty"`
+	Label      string `json:"label,omitempty"`
+	Group      string `json:"group,omitempty"`
 	Host       string `json:"host"`
 	Port       int    `json:"port"`
 	User       string `json:"user"`
@@ -145,8 +149,37 @@ func aead(key []byte) (cipher.AEAD, error) {
 	return cipher.NewGCMWithRandomNonce(b)
 }
 func valid(c Credential) bool {
-	return c.Host != "" && len(c.Host) <= 253 && c.User != "" && len(c.User) <= 256 && c.Port > 0 && c.Port <= 65535 && len(c.Password) <= 65536 && len(c.Passphrase) <= 65536 && len(c.KeyPath) <= 4096 && ((c.Method == "password" && c.KeyPath == "" && c.Passphrase == "") || (c.Method == "key" && c.KeyPath != "" && c.Password == ""))
+	if len(c.KeyID) > 64 || len(c.Label) > 100 || len(c.Group) > 100 || len(c.PrivateKey) > 4096 {
+		return false
+	}
+	switch c.Method {
+	case "identity":
+		return c.PrivateKey != "" && c.Label != "" && c.KeyID == "" && c.Host == "" && c.Port == 0 && c.User == "" && c.Group == "" && c.Password == "" && c.Passphrase == "" && c.KeyPath == ""
+	case "group-key":
+		return c.KeyID != "" && c.PrivateKey == "" && c.Label == "" && c.Host == "" && c.Port == 0 && c.User == "" && c.Password == "" && c.Passphrase == "" && c.KeyPath == ""
+	}
+	if c.PrivateKey != "" || c.Label != "" || c.Group != "" {
+		return false
+	}
+	return c.Host != "" && len(c.Host) <= 253 && c.User != "" && len(c.User) <= 256 && c.Port > 0 && c.Port <= 65535 && len(c.Password) <= 65536 && len(c.Passphrase) <= 65536 && len(c.KeyPath) <= 4096 && ((c.Method == "password" && c.KeyID == "" && c.KeyPath == "" && c.Passphrase == "") ||
+		(c.Method == "key" && c.KeyID == "" && c.KeyPath != "" && c.Password == "") ||
+		(c.Method == "managed-key" && c.KeyID != "" && c.KeyPath == "" && c.Password == "" && c.Passphrase == ""))
 }
+
+// Snapshot is backend-only; metadata APIs must never expose Credential values.
+func (s *Store) Snapshot() (map[string]Credential, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if e := s.current(); e != nil {
+		return nil, e
+	}
+	result := make(map[string]Credential, len(s.entries))
+	for k, v := range s.entries {
+		result[k] = v
+	}
+	return result, nil
+}
+
 func (s *Store) Create(master string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()

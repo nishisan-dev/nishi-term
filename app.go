@@ -103,6 +103,12 @@ func (a *App) DeleteCredential(id string) error {
 	if a.vault == nil {
 		return errors.New("cofre indisponível")
 	}
+	if a.credentials == nil {
+		return errors.New("cofre indisponível")
+	}
+	if _, e := a.credentials.Profile(id); e != nil {
+		return e
+	}
 	return a.vault.Delete(id)
 }
 
@@ -112,3 +118,42 @@ func (a *App) ListFiles(id, path string) (sshengine.Directory, error) {
 	return a.engine.ListFiles(id, path)
 }
 func (a *App) CancelFiles(id string) { a.engine.CancelFiles(id) }
+
+func (a *App) GenerateKey(label string) (credentials.KeyInfo, error) {
+	if a.credentials == nil {
+		return credentials.KeyInfo{}, errors.New("cofre indisponível")
+	}
+	return a.credentials.GenerateKey(label)
+}
+func (a *App) ListKeys() ([]credentials.KeyInfo, error) {
+	if a.credentials == nil {
+		return nil, errors.New("cofre indisponível")
+	}
+	return a.credentials.Keys()
+}
+func (a *App) AssignKey(keyID, profileID, group string, toGroup bool) error {
+	if a.credentials == nil {
+		return errors.New("cofre indisponível")
+	}
+	return a.credentials.AssignKey(keyID, profileID, group, toGroup)
+}
+func (a *App) GroupCoverage(group string) ([]credentials.Coverage, error) {
+	if a.credentials == nil {
+		return nil, errors.New("cofre indisponível")
+	}
+	return a.credentials.Coverage(group)
+}
+func (a *App) InstallKey(sessionID, profileID, keyID string) error {
+	if a.credentials == nil {
+		return errors.New("cofre indisponível")
+	}
+	p, e := a.credentials.Profile(profileID)
+	if e != nil {
+		return e
+	}
+	key, e := a.credentials.PublicKey(keyID)
+	if e != nil {
+		return e
+	}
+	return a.engine.InstallPublicKey(sessionID, p.Host, p.Port, p.User, key.PublicKey)
+}

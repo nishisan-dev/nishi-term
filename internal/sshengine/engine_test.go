@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strconv"
 	"sync"
@@ -118,6 +119,23 @@ func serverWithFiles(t *testing.T, payload []byte, exit uint32, root string, all
 						defer ch.Close()
 						for r := range reqs {
 							switch r.Type {
+							case "exec":
+								if root == "" || root == "stall" {
+									_ = r.Reply(false, nil)
+									continue
+								}
+								var request struct{ Command string }
+								_ = ssh.Unmarshal(r.Payload, &request)
+								_ = r.Reply(true, nil)
+								command := exec.Command("sh", "-c", request.Command)
+								command.Dir = root
+								command.Env = append(os.Environ(), "HOME="+root)
+								code := uint32(0)
+								if command.Run() != nil {
+									code = 1
+								}
+								_, _ = ch.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{code}))
+								return
 							case "subsystem":
 								f.sftpStarted.Store(true)
 								var request struct{ Name string }

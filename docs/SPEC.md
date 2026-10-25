@@ -68,3 +68,7 @@ Cofre inicial implementado com senha mestra própria, sem admin, Argon2id/AES-25
 ## Incremento autorizado em 25/10/2026
 
 Organizador de abas com busca, reordenação sem reconectar e fechamento de grupos confirmado. Navegador SFTP somente leitura sob o terminal, caminho independente do shell, filtro e cancelamento. Até 2.000 entradas, 1 MiB por resposta e 15 segundos por operação; ver [SFTP.md](SFTP.md). Transferências e métricas permanecem pendentes.
+
+## Chaves gerenciadas e grupos
+
+Gerador Ed25519 protegido pelo cofre, chave privada somente no backend, associação por host ou grupo com prioridade do host e instalação pública confirmada em sessão autenticada. Conectar grupo exige cobertura completa e capacidade disponível. Limites, compatibilidade do cofre e validação: [MANAGED_KEYS.md](MANAGED_KEYS.md).

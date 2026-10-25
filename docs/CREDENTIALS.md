@@ -33,3 +33,7 @@ Referências: [Argon2id em x/crypto](https://pkg.go.dev/golang.org/x/crypto/argo
 ## Desbloqueio ao conectar
 
 Ao escolher autenticação pelo cofre e conectar, a interface verifica seu estado. Se trancado, pede a senha mestra no próprio fluxo e continua a tentativa somente após desbloquear. Cancelar não inicia SSH; senha incorreta mantém o diálogo, limpa o campo e permite nova tentativa. Não cria cofre nem salva credenciais automaticamente. Uma corrida com bloqueio posterior ainda é recusada pelo backend.
+
+## Chaves gerenciadas e grupos
+
+Gerador Ed25519 protegido pelo cofre, chave privada somente no backend, associação por host ou grupo com prioridade do host e instalação pública confirmada em sessão autenticada. Conectar grupo exige cobertura completa e capacidade disponível. Limites, compatibilidade do cofre e validação: [MANAGED_KEYS.md](MANAGED_KEYS.md).

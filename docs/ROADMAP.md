@@ -13,3 +13,5 @@
 | 5 — distribuição | Portable, política WebView2, assinatura e pipeline reprodutível | Execução sem admin em máquina limpa e ambiente corporativo; rollback documentado |
 
 Não tratar fase 1 como produto pronto. Não implementar fases posteriores antes de avaliar os resultados. A navegação SFTP foi autorizada e implementada como fase 3C. Transferências e métricas seguem para a fase 4, após definir operações e plataformas. Túneis, broadcast, sincronização e plugins continuam sem requisito confirmado.
+
+Incremento implementado: chaves gerenciadas e conexão por grupo ([MANAGED_KEYS.md](MANAGED_KEYS.md)). Pendentes: validação nativa, backup/exportação do cofre, revogação e gestão de ciclo de vida de chaves.
