@@ -379,7 +379,7 @@ function SessionPane({
             Conectar <span aria-hidden="true">→</span>
           </button>
           <p className="trust-note">
-            Identidade verificada com{" "}
+            Verificação de identidade:{" "}
             <span title={tab.profile.knownHosts}>{tab.profile.knownHosts}</span>
           </p>
         </form>

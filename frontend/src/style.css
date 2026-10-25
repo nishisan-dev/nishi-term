@@ -67,7 +67,8 @@ button.icon-button:hover {
   background: #213348;
   color: #e8f4ff;
 }
-input {
+input,
+select {
   width: 100%;
   min-width: 0;
   background: #0b131f;
@@ -80,6 +81,7 @@ input::placeholder {
   color: #647c93;
 }
 input:focus-visible,
+select:focus-visible,
 button:focus-visible,
 summary:focus-visible {
   outline: 2px solid #64d9cf;
@@ -741,7 +743,7 @@ dialog::backdrop {
   }
   .auth-card {
     margin: 16px;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
   .auth-card > div {
     grid-column: 1/-1;
