@@ -1,3 +1,4 @@
+import { FactorInput } from "./two-factor";
 import React, { useEffect, useRef, useState } from "react";
 import {
   api,
@@ -19,6 +20,7 @@ export function VaultGate({ children }: { children: React.ReactNode }) {
     [error, setError] = useState(""),
     [busy, setBusy] = useState(false);
   const master = useRef<HTMLInputElement>(null);
+  const factorCode = useRef<HTMLInputElement>(null);
   useEffect(() => {
     let alive = true;
     api()
@@ -39,9 +41,12 @@ export function VaultGate({ children }: { children: React.ReactNode }) {
     setBusy(true);
     setError("");
     let secret = master.current?.value ?? "";
+    let otp = factorCode.current?.value ?? "";
+    if (factorCode.current) factorCode.current.value = "";
     if (master.current) master.current.value = "";
     try {
-      const pending = api().UnlockVault(secret);
+      const pending = api().UnlockVault(secret, otp);
+      otp = "";
       secret = "";
       await pending;
       setState(await api().VaultStatus());
@@ -78,6 +83,9 @@ export function VaultGate({ children }: { children: React.ReactNode }) {
               disabled={busy}
             />
           </label>
+          {state.twoFactor && (
+            <FactorInput inputRef={factorCode} disabled={busy} />
+          )}
           <div className="modal-actions">
             <button disabled={busy}>
               {busy ? "Desbloqueando…" : "Desbloquear"}

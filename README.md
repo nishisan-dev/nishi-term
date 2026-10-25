@@ -84,3 +84,5 @@ Capacidade atual e evidências de carga: [16 sessões](docs/SESSION_CAPACITY.md)
 Nova etapa: [arquivos remotos SFTP](docs/SFTP.md) e [roteiro de revisão](docs/MORNING_REVIEW.md). O botão **Abas (N)** permite localizar, reordenar e fechar grupos com confirmação.
 
 [Chaves SSH gerenciadas](docs/MANAGED_KEYS.md): gere Ed25519 no cofre, associe a host/grupo, instale a chave pública em sessão POSIX autenticada e conecte grupos com cobertura completa, respeitando 16 sessões.
+
+[2FA opcional do cofre](docs/VAULT_2FA.md): Google Authenticator e aplicativos TOTP, QR local e códigos de recuperação. É proteção do desbloqueio no aplicativo; a criptografia offline continua dependendo da senha mestra.

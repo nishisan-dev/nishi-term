@@ -37,3 +37,7 @@ Ao escolher autenticação pelo cofre e conectar, a interface verifica seu estad
 ## Chaves gerenciadas e grupos
 
 Gerador Ed25519 protegido pelo cofre, chave privada somente no backend, associação por host ou grupo com prioridade do host e instalação pública confirmada em sessão autenticada. Conectar grupo exige cobertura completa e capacidade disponível. Limites, compatibilidade do cofre e validação: [MANAGED_KEYS.md](MANAGED_KEYS.md).
+
+## 2FA do cofre
+
+2FA TOTP opcional, cadastro local confirmado, códigos de recuperação e desbloqueio validado no backend. Limitações offline, formato v2, recuperação e testes: [VAULT_2FA.md](VAULT_2FA.md).

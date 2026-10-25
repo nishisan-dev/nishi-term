@@ -45,23 +45,38 @@ type envelope struct {
 	Data    []byte `json:"data"`
 }
 type Status struct {
-	Exists bool `json:"exists"`
-	Locked bool `json:"locked"`
+	Exists    bool `json:"exists"`
+	Locked    bool `json:"locked"`
+	TwoFactor bool `json:"twoFactor"`
 }
 type Store struct {
-	mu        sync.Mutex
-	path      string
-	key, salt []byte
-	entries   map[string]Credential
-	digest    [32]byte
-	expires   int64
-	retry     time.Time
-	timer     *time.Timer
-	epoch     uint64
+	recoveryProof string
+	recoveryUntil time.Time
+	factor        *twoFactor
+	pending       *enrollment
+	mu            sync.Mutex
+	path          string
+	key, salt     []byte
+	entries       map[string]Credential
+	digest        [32]byte
+	expires       int64
+	retry         time.Time
+	timer         *time.Timer
+	epoch         uint64
 }
 
 func New(path string) *Store { return &Store{path: path} }
 func (s *Store) lock() {
+	s.recoveryProof = ""
+	s.recoveryUntil = time.Time{}
+	if s.factor != nil {
+		clear(s.factor.Secret)
+		s.factor = nil
+	}
+	if s.pending != nil {
+		clear(s.pending.secret)
+		s.pending = nil
+	}
 	s.epoch++
 	if s.timer != nil {
 		s.timer.Stop()
@@ -106,7 +121,15 @@ func (s *Store) Status() (Status, error) {
 	if e != nil || !st.Mode().IsRegular() {
 		return Status{Exists: true, Locked: true}, ErrFile
 	}
-	return Status{Exists: true, Locked: s.key == nil}, nil
+	raw, e := read(s.path)
+	if e != nil {
+		return Status{Exists: true, Locked: true}, e
+	}
+	var env envelope
+	if decode(raw, &env) != nil || (env.Version != 1 && env.Version != 2) {
+		return Status{Exists: true, Locked: true}, ErrFile
+	}
+	return Status{Exists: true, Locked: s.key == nil, TwoFactor: env.Version == 2}, nil
 }
 func read(path string) ([]byte, error) {
 	f, e := os.Open(path)
@@ -204,7 +227,7 @@ func (s *Store) Create(master string) error {
 	s.touch()
 	return nil
 }
-func (s *Store) Unlock(master string) error {
+func (s *Store) Unlock(master string, codes ...string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if time.Now().Before(s.retry) {
@@ -220,7 +243,7 @@ func (s *Store) Unlock(master string) error {
 		return ErrUnlock
 	}
 	var env envelope
-	if decode(raw, &env) != nil || env.Version != 1 || len(env.Salt) != 16 || len(env.Data) < 28 {
+	if decode(raw, &env) != nil || (env.Version != 1 && env.Version != 2) || len(env.Salt) != 16 || len(env.Data) < 28 {
 		return ErrUnlock
 	}
 	key := derive(master, env.Salt)
@@ -229,14 +252,27 @@ func (s *Store) Unlock(master string) error {
 		clear(key)
 		return ErrUnlock
 	}
-	plain, e := a.Open(nil, nil, env.Data, aad)
+	plain, e := a.Open(nil, nil, env.Data, associated(env.Version))
 	if e != nil {
 		clear(key)
 		return ErrUnlock
 	}
 	defer clear(plain)
 	var entries map[string]Credential
-	if decode(plain, &entries) != nil || entries == nil || len(entries) > 200 {
+	var factor *twoFactor
+	var parseErr error
+	if env.Version == 2 {
+		var payload payloadV2
+		parseErr = decode(plain, &payload)
+		entries = payload.Entries
+		factor = payload.Factor
+		if !validFactor(factor) {
+			parseErr = ErrUnlock
+		}
+	} else {
+		parseErr = decode(plain, &entries)
+	}
+	if parseErr != nil || entries == nil || len(entries) > 200 {
 		clear(key)
 		return ErrUnlock
 	}
@@ -247,10 +283,35 @@ func (s *Store) Unlock(master string) error {
 			return ErrUnlock
 		}
 	}
+	if factor != nil {
+		code := ""
+		if len(codes) == 1 {
+			code = codes[0]
+		}
+		updated, err := consumeFactor(factor, code, time.Now())
+		clear(factor.Secret)
+		if err != nil {
+			clear(key)
+			clear(entries)
+			return ErrFactor
+		}
+		factor = updated
+	}
 	s.key = key
+	s.factor = factor
 	s.salt = env.Salt
 	s.entries = entries
 	s.digest = sha256.Sum256(raw)
+	if factor != nil {
+		if e = s.write(entries, false); e != nil {
+			s.lock()
+			return e
+		}
+	}
+	if factor != nil && len(codes) == 1 && len(normalizeRecovery(codes[0])) == 32 {
+		s.recoveryProof = recoveryHash(codes[0])
+		s.recoveryUntil = time.Now().Add(5 * time.Minute)
+	}
 	s.retry = time.Time{}
 	s.touch()
 	return nil
@@ -350,7 +411,13 @@ func (s *Store) write(entries map[string]Credential, create bool) error {
 			return ErrFile
 		}
 	}
-	plain, e := json.Marshal(entries)
+	version := 1
+	var payload any = entries
+	if s.factor != nil {
+		version = 2
+		payload = payloadV2{Entries: entries, Factor: s.factor}
+	}
+	plain, e := json.Marshal(payload)
 	if e != nil {
 		return ErrFile
 	}
@@ -359,7 +426,7 @@ func (s *Store) write(entries map[string]Credential, create bool) error {
 	if e != nil {
 		return ErrFile
 	}
-	raw, e := json.Marshal(envelope{Version: 1, Salt: s.salt, Data: a.Seal(nil, nil, plain, aad)})
+	raw, e := json.Marshal(envelope{Version: version, Salt: s.salt, Data: a.Seal(nil, nil, plain, associated(version))})
 	if e != nil || len(raw) > maxSize {
 		return ErrFile
 	}

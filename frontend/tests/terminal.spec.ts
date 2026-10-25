@@ -33,7 +33,7 @@ async function bridge(page: Page, mode = "stream") {
         inputs: [] as any[],
         saves: [] as any[],
         next: 0,
-        vault: { exists: false, locked: true },
+        vault: { exists: false, locked: true, twoFactor: false },
         savedCredentials: [] as string[],
         keys: [] as any[],
         assignments: [] as any[],
@@ -139,11 +139,41 @@ async function bridge(page: Page, mode = "stream") {
             },
             SessionUsage: async () =>
               Object.values(sessions).filter((s) => !s.closed).length,
+            BeginTwoFactor: async (_master: string) => {
+              if (_master === "wrong-master") throw "senha incorreta";
+              return {
+                token: "fixture-enrollment",
+                secret: "JBSWY3DPEHPK3PXP",
+                uri: "otpauth://totp/NishiTerm:Fixture?secret=JBSWY3DPEHPK3PXP&issuer=NishiTerm&digits=6&period=30",
+              };
+            },
+            ConfirmTwoFactor: async (_token: string, _code: string) => {
+              if (_token !== "fixture-enrollment" || _code !== "123456")
+                throw "código 2FA inválido";
+              m.vault.twoFactor = true;
+              return Array.from(
+                { length: 10 },
+                (_, i) =>
+                  "FAKE0000-00000000-00000000-" + String(i).padStart(8, "0"),
+              );
+            },
+            CancelTwoFactorEnrollment: async () => {},
+            DisableTwoFactor: async (_master: string, _code: string) => {
+              if (_master === "wrong-master" || _code !== "123456")
+                throw "autenticação recusada";
+              m.vault.twoFactor = false;
+            },
             VaultStatus: async () => ({ ...m.vault }),
             CreateVault: async (_master: string) => {
-              m.vault = { exists: true, locked: false };
+              m.vault = { exists: true, locked: false, twoFactor: false };
             },
-            UnlockVault: async (_master: string) => {
+            UnlockVault: async (_master: string, _code: string) => {
+              if (
+                m.vault.twoFactor &&
+                _code !== "123456" &&
+                _code !== "FAKE0000-00000000-00000000-00000000"
+              )
+                throw "código 2FA inválido";
               if (_master === "incorrect-master")
                 throw "não foi possível desbloquear";
               m.vault.locked = false;
@@ -937,7 +967,7 @@ test("group exceeding available capacity starts no sessions", async ({
   await page.goto("/");
   await page.evaluate(() => {
     const m = (window as any).mock;
-    m.vault = { exists: true, locked: false };
+    m.vault = { exists: true, locked: false, twoFactor: false };
     m.savedCredentials = ["a", "b"];
     (window as any).go.main.App.SessionUsage = async () => 15;
   });
@@ -951,4 +981,122 @@ test("group exceeding available capacity starts no sessions", async ({
     "Nenhuma nova sessão foi iniciada",
   );
   expect(await page.evaluate(() => (window as any).mock.next)).toBe(0);
+});
+
+test("2FA enrollment, local QR, recovery display and authenticated removal", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    (window as any).mock.vault = {
+      exists: true,
+      locked: false,
+      twoFactor: false,
+    };
+  });
+  await page
+    .getByRole("button", { name: /^(Criar cofre|Cofre desbloqueado)$/ })
+    .click();
+  await page
+    .getByRole("button", { name: "Configurar 2FA", exact: true })
+    .click();
+  await page
+    .getByLabel("Confirme a senha mestra")
+    .fill("fixture-master-password");
+  await page
+    .getByRole("button", { name: "Gerar QR code", exact: true })
+    .click();
+  await expect(
+    page.getByAltText("QR code para cadastrar o cofre no autenticador"),
+  ).toHaveAttribute("src", /^data:image\/png/);
+  await page.screenshot({
+    path: "../docs/evidence/product-ui/totp-setup-fixture.png",
+  });
+  await page.getByLabel("Código 2FA ou de recuperação").fill("000000");
+  await page
+    .getByRole("button", { name: "Confirmar e ativar 2FA", exact: true })
+    .click();
+  await expect(page.getByRole("alert")).toContainText("código 2FA inválido");
+  await expect(page.getByLabel("Código 2FA ou de recuperação")).toHaveValue("");
+  await page.getByLabel("Código 2FA ou de recuperação").fill("123456");
+  await page
+    .getByRole("button", { name: "Confirmar e ativar 2FA", exact: true })
+    .click();
+  await expect(page.locator(".recovery-codes")).toContainText("FAKE0000");
+  await expect(page.getByLabel("Chave de configuração 2FA")).toHaveCount(0);
+  await page
+    .getByRole("button", { name: "Guardei os códigos", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Bloquear agora", exact: true })
+    .click();
+  await page
+    .getByLabel("Senha mestra", { exact: true })
+    .fill("fixture-master-password");
+  await page.getByLabel("Código 2FA ou de recuperação").fill("000000");
+  await page.getByRole("button", { name: "Desbloquear", exact: true }).click();
+  await expect(page.getByRole("alert")).toContainText("código 2FA inválido");
+  await expect(page.getByLabel("Código 2FA ou de recuperação")).toHaveValue("");
+  await page
+    .getByLabel("Senha mestra", { exact: true })
+    .fill("fixture-master-password");
+  await page
+    .getByLabel("Código 2FA ou de recuperação")
+    .fill("FAKE0000-00000000-00000000-00000000");
+  await page.getByRole("button", { name: "Desbloquear", exact: true }).click();
+  await expect(page.getByRole("dialog")).not.toBeVisible();
+  await page
+    .getByRole("button", { name: "Cofre desbloqueado", exact: true })
+    .click();
+  await page
+    .getByRole("button", { name: "Desativar 2FA", exact: true })
+    .click();
+  await page
+    .getByLabel("Confirme a senha mestra")
+    .fill("fixture-master-password");
+  await page.getByLabel("Código 2FA ou de recuperação").fill("123456");
+  await page
+    .getByRole("button", { name: "Confirmar desativação", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: "Configurar 2FA", exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => localStorage.length)).toBe(0);
+});
+
+test("2FA is requested when connecting and in the group vault gate", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    const m = (window as any).mock;
+    m.vault = { exists: true, locked: true, twoFactor: true };
+    m.savedCredentials = ["a", "b"];
+  });
+  await page.getByRole("button", { name: "Alpha", exact: true }).click();
+  await page.getByLabel("Autenticação", { exact: true }).selectOption("vault");
+  await page.getByRole("button", { name: "Conectar", exact: true }).click();
+  await page
+    .getByLabel("Senha mestra para conectar")
+    .fill("fixture-master-password");
+  await page.getByLabel("Código 2FA ou de recuperação").fill("123456");
+  await page
+    .getByRole("button", { name: "Desbloquear e conectar", exact: true })
+    .click();
+  await expect(page.locator(".connection-state")).toHaveText("Conectado");
+  await page.evaluate(() => {
+    (window as any).mock.vault.locked = true;
+  });
+  await page
+    .getByRole("button", { name: "Conectar grupo Laboratório", exact: true })
+    .click();
+  await page
+    .getByRole("dialog")
+    .getByLabel("Senha mestra", { exact: true })
+    .fill("fixture-master-password");
+  await page.getByLabel("Código 2FA ou de recuperação").fill("123456");
+  await page.getByRole("button", { name: "Desbloquear", exact: true }).click();
+  await expect(page.getByRole("dialog")).toContainText("2/2 hosts");
 });

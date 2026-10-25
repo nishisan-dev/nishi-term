@@ -82,11 +82,11 @@ func (a *App) CreateVault(master string) error {
 	}
 	return a.vault.Create(master)
 }
-func (a *App) UnlockVault(master string) error {
+func (a *App) UnlockVault(master, code string) error {
 	if a.vault == nil {
 		return errors.New("cofre indisponível")
 	}
-	return a.vault.Unlock(master)
+	return a.vault.Unlock(master, code)
 }
 func (a *App) LockVault() {
 	if a.vault != nil {
@@ -156,4 +156,28 @@ func (a *App) InstallKey(sessionID, profileID, keyID string) error {
 		return e
 	}
 	return a.engine.InstallPublicKey(sessionID, p.Host, p.Port, p.User, key.PublicKey)
+}
+
+func (a *App) BeginTwoFactor(master string) (vault.Enrollment, error) {
+	if a.vault == nil {
+		return vault.Enrollment{}, errors.New("cofre indisponível")
+	}
+	return a.vault.BeginTwoFactor(master)
+}
+func (a *App) ConfirmTwoFactor(token, code string) ([]string, error) {
+	if a.vault == nil {
+		return nil, errors.New("cofre indisponível")
+	}
+	return a.vault.ConfirmTwoFactor(token, code)
+}
+func (a *App) CancelTwoFactorEnrollment() {
+	if a.vault != nil {
+		a.vault.CancelTwoFactorEnrollment()
+	}
+}
+func (a *App) DisableTwoFactor(master, code string) error {
+	if a.vault == nil {
+		return errors.New("cofre indisponível")
+	}
+	return a.vault.DisableTwoFactor(master, code)
 }

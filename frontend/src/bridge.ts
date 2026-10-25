@@ -33,7 +33,12 @@ export type Profile = {
   user: string;
   knownHosts: string;
 };
-export type VaultStatus = { exists: boolean; locked: boolean };
+export type VaultStatus = {
+  exists: boolean;
+  locked: boolean;
+  twoFactor?: boolean;
+};
+export type Enrollment = { secret: string; uri: string; token: string };
 export type RemoteDirectory = {
   path: string;
   entries: {
@@ -65,7 +70,11 @@ export interface Bridge {
   SessionUsage(): Promise<number>;
   VaultStatus(): Promise<VaultStatus>;
   CreateVault(master: string): Promise<void>;
-  UnlockVault(master: string): Promise<void>;
+  UnlockVault(master: string, code: string): Promise<void>;
+  BeginTwoFactor(master: string): Promise<Enrollment>;
+  ConfirmTwoFactor(token: string, code: string): Promise<string[]>;
+  CancelTwoFactorEnrollment(): Promise<void>;
+  DisableTwoFactor(master: string, code: string): Promise<void>;
   LockVault(): Promise<void>;
   SaveCredential(id: string, config: Config): Promise<void>;
   DeleteCredential(id: string): Promise<void>;

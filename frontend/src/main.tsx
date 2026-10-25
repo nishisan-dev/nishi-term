@@ -5,6 +5,7 @@ import { api, type Profile, type Config, type VaultStatus } from "./bridge";
 import { TerminalSession, stateLabels, type SessionStatus } from "./session";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
+import { FactorInput, TwoFactorSettings } from "./two-factor";
 import { KeyManager, GroupConnect, VaultGate } from "./key-manager";
 import { FilesPanel } from "./files";
 import { afterPaint } from "./paint";
@@ -259,6 +260,7 @@ function VaultControls() {
     [error, setError] = useState("");
   const master = useRef<HTMLInputElement>(null),
     repeat = useRef<HTMLInputElement>(null);
+  const factorCode = useRef<HTMLInputElement>(null);
   const polling = useRef(false);
   const refresh = useCallback(async () => {
     if (polling.current) return;
@@ -281,6 +283,8 @@ function VaultControls() {
     if (!status || busy) return;
     let secret = master.current?.value ?? "";
     let confirmation = repeat.current?.value ?? "";
+    let otp = factorCode.current?.value ?? "";
+    if (factorCode.current) factorCode.current.value = "";
     if (master.current) master.current.value = "";
     if (repeat.current) repeat.current.value = "";
     if (!status.exists && secret !== confirmation) {
@@ -294,9 +298,10 @@ function VaultControls() {
     setError("");
     try {
       const pending = status.exists
-        ? api().UnlockVault(secret)
+        ? api().UnlockVault(secret, otp)
         : api().CreateVault(secret);
       secret = "";
+      otp = "";
       await pending;
       await refresh();
       setShow(false);
@@ -360,6 +365,11 @@ function VaultControls() {
               >
                 Bloquear agora
               </button>
+              <TwoFactorSettings
+                enabled={!!status.twoFactor}
+                onChanged={() => void refresh()}
+                onBusy={setBusy}
+              />
             </>
           ) : (
             <form className="vault-form" onSubmit={submit}>
@@ -380,6 +390,9 @@ function VaultControls() {
                   disabled={busy}
                 />
               </label>
+              {status.twoFactor && (
+                <FactorInput inputRef={factorCode} disabled={busy} />
+              )}
               {!status.exists && (
                 <label>
                   Confirmar senha mestra
@@ -436,6 +449,8 @@ function SessionPane({
   const [unlockBusy, setUnlockBusy] = useState(false);
   const [unlockError, setUnlockError] = useState("");
   const masterForConnection = useRef<HTMLInputElement>(null);
+  const connectionFactor = useRef<HTMLInputElement>(null);
+  const [needsFactor, setNeedsFactor] = useState(false);
   const pendingConnection = useRef<Config | null>(null);
   const checkingVault = useRef(false);
   const [terminalReady, setTerminalReady] = useState(false);
@@ -519,6 +534,7 @@ function SessionPane({
       }
       if (vault.locked) {
         pendingConnection.current = c;
+        setNeedsFactor(!!vault.twoFactor);
         setUnlockError("");
         setUnlockForConnection(true);
       } else {
@@ -537,9 +553,12 @@ function SessionPane({
     setUnlockBusy(true);
     setUnlockError("");
     let secret = masterForConnection.current?.value ?? "";
+    let otp = connectionFactor.current?.value ?? "";
+    if (connectionFactor.current) connectionFactor.current.value = "";
     if (masterForConnection.current) masterForConnection.current.value = "";
     try {
-      const unlocking = api().UnlockVault(secret);
+      const unlocking = api().UnlockVault(secret, otp);
+      otp = "";
       secret = "";
       await unlocking;
       if (!instance || controller.current !== instance) return;
@@ -615,6 +634,9 @@ function SessionPane({
                 disabled={unlockBusy}
               />
             </label>
+            {needsFactor && (
+              <FactorInput inputRef={connectionFactor} disabled={unlockBusy} />
+            )}
             {unlockError && (
               <p role="alert" className="error">
                 {unlockError}

@@ -1143,3 +1143,33 @@ details.wide summary {
 .key-fields[hidden] {
   display: none;
 }
+
+.two-factor {
+  border-top: 1px solid #294159;
+  margin-top: 20px;
+  padding-top: 12px;
+  max-height: 60vh;
+  overflow: auto;
+}
+.two-factor h3 {
+  font-size: 14px;
+}
+.two-factor form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.totp-qr {
+  width: 200px;
+  height: 200px;
+  max-width: 100%;
+  align-self: center;
+}
+.recovery-codes {
+  padding: 12px;
+  background: #0a1420;
+  overflow: auto;
+  font-size: 12px;
+  line-height: 1.7;
+  user-select: text;
+}
