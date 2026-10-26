@@ -27,3 +27,15 @@ Nesta etapa, a suíte de interface passou com 12 testes. As suítes internas pas
 A interface mostra preparação do terminal e progresso de conexão antes de inicialização/reset e chamada Start. Um teste com Start pendente verifica que o indicador já existe ao entrar no bridge, que cancelar continua disponível e que uma resposta tardia é encerrada sem Poll. O formulário tem controles de mesma altura e ações alinhadas; a animação respeita redução de movimento. Capturas usam bridge simulado. O relato do usuário motivou a mudança; não foi medido ganho de latência de rede.
 
 Capacidade atual e evidências de carga: [16 sessões](SESSION_CAPACITY.md).
+
+## Ergonomia da escolha de chave do cofre — 26/10/2026
+
+Cadastro/edição distingue chave gerada no cofre, arquivo local e credencial já associada. O seletor consulta somente metadados públicos após desbloqueio (incluindo 2FA), permite preservar a chave herdada e exige confirmação de associação específica se destino/grupo mudou. Falha após salvar metadados informa persistência parcial e reutiliza o ID ao tentar novamente.
+
+Validação local executada: `npm ci` (62 pacotes, auditoria sem achados), `npm run build` (aviso de tamanho de bundle permanece), `CHROME_PATH=/usr/bin/google-chrome npm test -- terminal.spec.ts`: **28/28**, 34,2 s. Cinco novos casos cobrem fator inválido e limpeza, escolha de chave sem segredo/ID no perfil, falha de associação com retry sem duplicata, lista vazia/cancelamento, inspeção de herança sem associação específica, alteração de destino e novo desbloqueio antes de salvar. O rodapé do cadastro mantém ações visíveis em 800×540. Captura `profile-vault-key-fixture.png` foi inspecionada visualmente e usa bridge simulado/dados fictícios.
+
+`/snap/go/current/bin/go test -race ./internal/credentials ./internal/profiles` e `go vet` para esses dois pacotes passaram. O novo teste de `AssignedKey` verifica somente metadados, leitura sem escrita, prioridade da credencial específica, destino alterado e cofre bloqueado. Sem acesso a hosts reais ou ao cofre do usuário. Estes resultados não substituem ensaio nativo Windows, revisão de segurança ou validação integrada das demais funcionalidades em andamento.
+
+## Observabilidade Linux — 26/10/2026
+
+Coletor e painel implementados conforme [OBSERVABILITY.md](OBSERVABILITY.md). Testes locais com race detector passaram para parsing, taxas, reset/lacunas, resposta excessiva, cancelamento, bloqueio de exec/abertura e isolamento de terminal/SFTP. Coleta travada em 16 sessões preserva capacidade e eco independente. O comando fixo foi verificado em Linux local; nenhum host real do usuário foi acessado. Go vet local e cross-vet Windows passaram. Testes Chromium com bridge simulado validam atualização, erro, recolhimento/pausa, retomada e layout 1280×720/800×540; capturas metrics-fixture.png e metrics-compact-fixture.png em evidence/product-ui. Testes não comprovam latência de uso prolongado em rede real nem ensaio de GUI nativa Windows.

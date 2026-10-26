@@ -13,6 +13,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -24,11 +25,12 @@ import (
 )
 
 type fixture struct {
-	config      Config
-	key         ssh.Signer
-	auth        atomic.Int32
-	resize      chan [2]uint32
-	sftpStarted atomic.Bool
+	config         Config
+	key            ssh.Signer
+	auth           atomic.Int32
+	resize         chan [2]uint32
+	sftpStarted    atomic.Bool
+	metricsStarted atomic.Bool
 }
 
 func signer(t *testing.T) ssh.Signer {
@@ -49,6 +51,10 @@ func server(t *testing.T, payload []byte, exit uint32, allowedKeys ...ssh.Public
 func serverWithFiles(t *testing.T, payload []byte, exit uint32, root string, allowedKeys ...ssh.PublicKey) *fixture {
 	t.Helper()
 	f := &fixture{key: signer(t), resize: make(chan [2]uint32, 8)}
+	sftpRoot := root
+	if strings.HasPrefix(root, "metrics:") {
+		sftpRoot = t.TempDir()
+	}
 	listener, e := net.Listen("tcp", "127.0.0.1:0")
 	if e != nil {
 		t.Fatal(e)
@@ -106,7 +112,14 @@ func serverWithFiles(t *testing.T, payload []byte, exit uint32, root string, all
 						_ = r.Reply(true, nil)
 					}
 				}()
+				channelCount := 0
 				for incoming := range channels {
+					channelCount++
+					if root == "metrics:open-stall" && channelCount > 1 {
+						f.metricsStarted.Store(true)
+						go func() { _ = conn.Wait() }()
+						continue
+					}
 					if incoming.ChannelType() != "session" {
 						_ = incoming.Reject(ssh.UnknownChannelType, "unsupported")
 						continue
@@ -120,6 +133,11 @@ func serverWithFiles(t *testing.T, payload []byte, exit uint32, root string, all
 						for r := range reqs {
 							switch r.Type {
 							case "exec":
+								if strings.HasPrefix(root, "metrics:") {
+									f.metricsStarted.Store(true)
+									serveMetricsFixture(ch, r, root)
+									return
+								}
 								if root == "" || root == "stall" {
 									_ = r.Reply(false, nil)
 									continue
@@ -148,7 +166,7 @@ func serverWithFiles(t *testing.T, payload []byte, exit uint32, root string, all
 									continue
 								}
 								_ = r.Reply(true, nil)
-								server, err := sftp.NewServer(ch, sftp.WithServerWorkingDirectory(root), sftp.ReadOnly())
+								server, err := sftp.NewServer(ch, sftp.WithServerWorkingDirectory(sftpRoot), sftp.ReadOnly())
 								if err != nil {
 									return
 								}

@@ -57,3 +57,5 @@ Cofre inicial implementado com senha mestra própria, sem admin, Argon2id/AES-25
 
 - RTT ICMP não representa disponibilidade: firewalls e política local podem impedir resposta. Sem fallback/elevacão; ocultar texto em falhas. Validar loopback v4/v6 nas duas plataformas, cancelamento, concorrência, expiração e independência do estado SSH.
 - Preferência de cofre inicia conexão ao abrir: preservar confirmação de identidade, desbloqueio/2FA, limite de sessões e cancelamento. Testar perfis antigos, caminho de chave e cópias de perfis em abas abertas. Ver CONNECTION_WORKFLOW.md.
+
+- Observabilidade: canal SSH bloqueado não pode ser cancelado na abertura sem encerrar transporte. Retenção máxima de um worker por sessão, sem novas tentativas concorrentes; UI retorna em 3 s. Testar bloqueio de abertura/exec e terminal/SFTP responsivos. Rede agregada pode contar interfaces virtuais em duplicidade; aviso explícito. Dados ausentes/reset não viram zeros. Histórico limitado e sem persistência. Ver OBSERVABILITY.md.

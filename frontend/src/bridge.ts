@@ -56,10 +56,25 @@ export type Latencies = Record<
   string,
   { milliseconds: number; address: string; measuredAt: number }
 >;
+export type MetricsSample = {
+  measuredAt: number;
+  cpu: number | null;
+  cores: number;
+  memoryTotal: number;
+  memoryUsed: number;
+  diskTotal: number;
+  diskUsed: number;
+  uptime: number;
+  receive: number | null;
+  transmit: number | null;
+};
 export interface Bridge {
+  Metrics(id: string): Promise<MetricsSample>;
+  CancelMetrics(id: string): Promise<void>;
   HostLatencies(): Promise<Latencies>;
   GenerateKey(label: string): Promise<KeyInfo>;
   ListKeys(): Promise<KeyInfo[]>;
+  AssignedKey(profileID: string): Promise<KeyInfo | null>;
   AssignKey(
     keyID: string,
     profileID: string,

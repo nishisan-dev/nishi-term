@@ -165,3 +165,35 @@ func (s *Service) Coverage(group string) ([]Coverage, error) {
 	return result, nil
 }
 func (s *Service) Profile(id string) (profiles.Profile, error) { return s.profile(id) }
+
+// AssignedKey returns public metadata only. Reading a profile does not mutate its
+// encrypted host association or inherited group default.
+func (s *Service) AssignedKey(profileID string) (*KeyInfo, error) {
+	p, e := s.profile(profileID)
+	if e != nil {
+		return nil, e
+	}
+	entries, e := s.Vault.Snapshot()
+	if e != nil {
+		return nil, e
+	}
+	c, ok := entries[p.ID]
+	if !ok {
+		c, ok = entries[groupID(p.Group)]
+		ok = ok && c.Method == "group-key" && c.Group == p.Group
+	}
+	if !ok {
+		return nil, nil
+	}
+	if c.Method != "group-key" && (c.Host != p.Host || c.Port != p.Port || c.User != p.User) {
+		return nil, errors.New("destino alterado: associe uma chave novamente para este perfil")
+	}
+	if c.Method != "managed-key" && c.Method != "group-key" {
+		return nil, nil
+	}
+	key, e := s.PublicKey(c.KeyID)
+	if e != nil {
+		return nil, e
+	}
+	return &key, nil
+}

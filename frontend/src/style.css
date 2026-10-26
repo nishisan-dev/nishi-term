@@ -1207,3 +1207,12 @@ details.wide summary {
 .group-menu button:focus-visible {
   background: #25445b;
 }
+
+/* Keep save/cancel reachable while a profile's key details scroll on small windows. */
+.profile-editor > .modal-actions {
+  position: sticky;
+  bottom: -24px;
+  background: #101c2b;
+  padding: 12px 0 0;
+  box-shadow: 0 -10px 14px #101c2b;
+}

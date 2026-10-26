@@ -17,3 +17,5 @@ Não tratar fase 1 como produto pronto. Não implementar fases posteriores antes
 Incremento implementado: chaves gerenciadas e conexão por grupo ([MANAGED_KEYS.md](MANAGED_KEYS.md)). Pendentes: validação nativa, backup/exportação do cofre, revogação e gestão de ciclo de vida de chaves.
 
 Incremento de usabilidade: preferências de autenticação no cadastro, menu de contexto do grupo e RTT ICMP opcional ([CONNECTION_WORKFLOW.md](CONNECTION_WORKFLOW.md)). Ensaio nativo do fluxo e ICMP com usuário comum no Windows permanece pendente.
+
+Observabilidade Linux autorizada: painel de CPU/memória/disco/rede/uptime, coleta isolada e limitada, histórico efêmero. Processo detalhado, alertas e histórico persistente continuam futuros; validação nativa/latência prolongada pendente. Ver [OBSERVABILITY.md](OBSERVABILITY.md).

@@ -9,6 +9,7 @@ import (
 	"io"
 	"net"
 	"nishiterm/internal/hosttrust"
+	"nishiterm/internal/observability"
 	"os"
 	"strconv"
 	"strings"
@@ -59,6 +60,11 @@ type Manager struct {
 	stopped  bool
 }
 type session struct {
+	metricsMu          sync.Mutex
+	metricsCancel      context.CancelFunc
+	metricsStarted     time.Time
+	metricsMeasured    time.Time
+	metricsPrevious    *observability.Raw
 	host, user         string
 	port               int
 	trustChallenge     *HostChallenge

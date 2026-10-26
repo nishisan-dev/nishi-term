@@ -5,6 +5,7 @@ import (
 	"errors"
 	"nishiterm/internal/credentials"
 	"nishiterm/internal/latency"
+	"nishiterm/internal/observability"
 	"nishiterm/internal/profiles"
 	"nishiterm/internal/sshengine"
 	"nishiterm/internal/vault"
@@ -197,4 +198,14 @@ func (a *App) DisableTwoFactor(master, code string) error {
 		return errors.New("cofre indisponível")
 	}
 	return a.vault.DisableTwoFactor(master, code)
+}
+
+func (a *App) Metrics(id string) (observability.Sample, error) { return a.engine.Metrics(id) }
+func (a *App) CancelMetrics(id string)                         { a.engine.CancelMetrics(id) }
+
+func (a *App) AssignedKey(profileID string) (*credentials.KeyInfo, error) {
+	if a.credentials == nil {
+		return nil, errors.New("cofre indisponível")
+	}
+	return a.credentials.AssignedKey(profileID)
 }

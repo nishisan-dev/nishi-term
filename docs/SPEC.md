@@ -80,3 +80,7 @@ Gerador Ed25519 protegido pelo cofre, chave privada somente no backend, associa�
 ### Preferência de autenticação e RTT
 
 O perfil define usuário e modo: pedir senha sempre, chave privada local ou credencial do cofre. A abertura de perfil de cofre solicita desbloqueio quando necessário. Ação de conectar grupo fica no menu de contexto. RTT ICMP opcional a cada 10 s aparece apenas quando há resposta, sem indicar estado/disponibilidade. Ver [CONNECTION_WORKFLOW.md](CONNECTION_WORKFLOW.md).
+
+### Observabilidade autorizada em 26/10/2026
+
+Painel lateral recolhível com CPU, memória, disco `/`, RX/TX e uptime para Linux, coletados em canal SSH separado sem instalar agente nem exigir root. Ativo apenas na aba visível/painel aberto; 5 s entre coletas, histórico em memória de 5 min, falhas/lacunas explícitas. Sem lista de processos ou alertas nesta etapa. [Semântica, limites e validação](OBSERVABILITY.md).

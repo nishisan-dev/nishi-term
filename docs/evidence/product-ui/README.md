@@ -37,3 +37,13 @@ Ambas as imagens usam bridge simulado, sem host real ou credencial preenchida.
 ## Conexão em andamento
 
 ![Feedback de conexão com bridge pendente simulado](connecting-fixture.png)
+
+## Chave do cofre no cadastro — 800×540
+
+![Escolha explícita de chave do cofre no cadastro](profile-vault-key-fixture.png)
+
+Bridge simulado, nome/fingerprint fictícios, sem chave privada, senha mestra ou códigos preenchidos. O cenário altera o destino e exige associação explícita; bloqueio durante a edição pede novo desbloqueio antes de salvar. Não representa SSH real nem ensaio Windows.
+
+### Observabilidade (26/10/2026)
+
+`metrics-fixture.png` e `metrics-compact-fixture.png`: painel de CPU/memória/disco/rede/uptime em 1280×720 e 800×540. Dados são fixtures declaradas do bridge de teste, não medições reais. Mostram as primeiras amostras de uma janela de cinco minutos; séries preenchem gradualmente. Testes verificam falhas e pausa ao ocultar/recolher. O layout compacto usa painel lateral sobreposto e rolagem interna.

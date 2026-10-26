@@ -106,3 +106,60 @@ func TestManagedKeysAndGroupCoverage(t *testing.T) {
 		t.Fatal(e)
 	}
 }
+
+func TestAssignedKeyMetadataPreservesHostAndGroupAssociations(t *testing.T) {
+	dir := t.TempDir()
+	v := vault.New(filepath.Join(dir, "vault.json"))
+	defer v.Lock()
+	s := &Service{Vault: v, Profiles: profiles.New(filepath.Join(dir, "profiles.json"))}
+	if e := v.Create("assigned-key-metadata-fixture"); e != nil {
+		t.Fatal(e)
+	}
+	ps, e := s.Profiles.Save(profiles.Profile{Name: "fixture", Group: "lab", Host: "fixture.invalid", Port: 22, User: "tester"})
+	if e != nil {
+		t.Fatal(e)
+	}
+	p := ps[0]
+	if key, e := s.AssignedKey(p.ID); e != nil || key != nil {
+		t.Fatal("unexpected association", e)
+	}
+	key, e := s.GenerateKey("group fixture")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if e := s.AssignKey(key.ID, "", "lab", true); e != nil {
+		t.Fatal(e)
+	}
+	before, _ := v.Snapshot()
+	assigned, e := s.AssignedKey(p.ID)
+	if e != nil || assigned == nil || assigned.ID != key.ID || assigned.Fingerprint != key.Fingerprint {
+		t.Fatal("inherited public metadata unavailable", e)
+	}
+	after, _ := v.Snapshot()
+	if len(before) != len(after) {
+		t.Fatal("inspection wrote a host association")
+	}
+	if _, ok := after[p.ID]; ok {
+		t.Fatal("inspection overrode group default")
+	}
+	if e := s.Save(p.ID, "password", "", "fixture-secret", ""); e != nil {
+		t.Fatal(e)
+	}
+	if assigned, e := s.AssignedKey(p.ID); e != nil || assigned != nil {
+		t.Fatal("password host association fell back to group key", e)
+	}
+	if e := s.AssignKey(key.ID, p.ID, "", false); e != nil {
+		t.Fatal(e)
+	}
+	p.Host = "changed.invalid"
+	if _, e := s.Profiles.Save(p); e != nil {
+		t.Fatal(e)
+	}
+	if _, e := s.AssignedKey(p.ID); e == nil {
+		t.Fatal("stale host binding accepted")
+	}
+	v.Lock()
+	if _, e := s.AssignedKey(p.ID); e == nil {
+		t.Fatal("metadata read while locked")
+	}
+}

@@ -52,6 +52,20 @@ async function bridge(page: Page, mode = "stream") {
               if (m.vault.locked) throw "cofre bloqueado";
               return m.keys.map((key: any) => ({ ...key }));
             },
+            AssignedKey: async (profileID: string) => {
+              if (m.vault.locked) throw "cofre bloqueado";
+              const profile = m.profiles.find((p: any) => p.id === profileID);
+              const assignment =
+                m.assignments.find(
+                  (a: any) => !a.toGroup && a.profileID === profileID,
+                ) ||
+                m.assignments.find(
+                  (a: any) => a.toGroup && a.group === profile?.group,
+                );
+              return (
+                m.keys.find((k: any) => k.id === assignment?.keyID) || null
+              );
+            },
             GenerateKey: async (label: string) => {
               const key = {
                 id: "key-" + (m.keys.length + 1),
@@ -68,6 +82,8 @@ async function bridge(page: Page, mode = "stream") {
               group: string,
               toGroup: boolean,
             ) => {
+              if (m.vault.locked || m.failAssign)
+                throw "Não foi possível associar a chave";
               m.assignments.push({ keyID, profileID, group, toGroup });
             },
             InstallKey: async (
@@ -1193,4 +1209,257 @@ test("group context menu and optional RTT do not change connection state", async
   });
   await expect(page.locator(".host-rtt")).toHaveCount(0);
   await expect(page.getByRole("tab")).toHaveCount(0);
+});
+
+test("profile selects a vault key after explicit unlock and 2FA without saving secrets", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    const m = (window as any).mock;
+    m.vault = { exists: true, locked: true, twoFactor: true };
+    m.keys = [
+      {
+        id: "key-fixture",
+        label: "Chave laboratório",
+        fingerprint: "SHA256:fixture-key",
+        publicKey: "ssh-ed25519 fixture",
+      },
+    ];
+  });
+  await page.getByRole("button", { name: "Editar Alpha", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Editar conexão" });
+  await editor.getByLabel("Autenticação do perfil").selectOption("managed");
+  await expect(
+    editor.getByLabel("Chave do cofre", { exact: true }),
+  ).toHaveCount(0);
+  await editor
+    .getByLabel("Senha mestra", { exact: true })
+    .fill("fixture-master-password");
+  await editor.getByLabel("Código 2FA ou de recuperação").fill("000000");
+  await editor
+    .getByRole("button", { name: "Desbloquear", exact: true })
+    .click();
+  await expect(editor.getByRole("alert")).toContainText("código 2FA inválido");
+  await expect(editor.getByLabel("Senha mestra", { exact: true })).toHaveValue(
+    "",
+  );
+  await editor
+    .getByLabel("Senha mestra", { exact: true })
+    .fill("fixture-master-password");
+  await editor.getByLabel("Código 2FA ou de recuperação").fill("123456");
+  await editor
+    .getByRole("button", { name: "Desbloquear", exact: true })
+    .click();
+  await editor
+    .getByLabel("Chave do cofre", { exact: true })
+    .selectOption("key-fixture");
+  await expect(editor).toContainText("SHA256:fixture-key");
+  await editor
+    .getByRole("button", { name: "Usar esta chave no cadastro" })
+    .click();
+  await expect(editor).toContainText(
+    "substituirá a credencial específica deste host",
+  );
+  await editor.getByRole("button", { name: "Salvar conexão" }).click();
+  await expect(editor).not.toBeVisible();
+  expect(await page.evaluate(() => (window as any).mock.assignments)).toEqual([
+    { keyID: "key-fixture", profileID: "a", group: "", toGroup: false },
+  ]);
+  const saves = JSON.stringify(
+    await page.evaluate(() => (window as any).mock.saves),
+  );
+  expect(saves).not.toContain("fixture-master-password");
+  expect(saves).not.toContain("key-fixture");
+  expect(saves).toContain('"authMethod":"vault"');
+});
+
+test("new vault-key profile reports a failed association and retries without duplication", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    const m = (window as any).mock;
+    m.vault = { exists: true, locked: false, twoFactor: false };
+    m.keys = [
+      {
+        id: "key-fixture",
+        label: "Chave laboratório",
+        fingerprint: "SHA256:fixture-key",
+        publicKey: "ssh-ed25519 fixture",
+      },
+    ];
+    m.failAssign = true;
+  });
+  await page
+    .getByRole("button", { name: "Nova conexão", exact: true })
+    .first()
+    .click();
+  const editor = page.getByRole("dialog", { name: "Nova conexão" });
+  await editor.getByLabel("Nome", { exact: true }).fill("Gamma");
+  await editor.getByLabel("Host", { exact: true }).fill("gamma.invalid");
+  await editor.getByLabel("Usuário", { exact: true }).fill("tester");
+  await editor.getByLabel("Autenticação do perfil").selectOption("managed");
+  await editor
+    .getByLabel("Chave do cofre", { exact: true })
+    .selectOption("key-fixture");
+  await editor
+    .getByRole("button", { name: "Usar esta chave no cadastro" })
+    .click();
+  await editor.getByRole("button", { name: "Salvar conexão" }).click();
+  await expect(editor.getByRole("alert")).toContainText(
+    "dados da conexão foram salvos, mas a chave não foi associada",
+  );
+  await page.evaluate(() => {
+    (window as any).mock.failAssign = false;
+  });
+  await editor.getByRole("button", { name: "Salvar conexão" }).click();
+  await expect(editor).not.toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        (window as any).mock.profiles.filter((p: any) => p.name === "Gamma")
+          .length,
+    ),
+  ).toBe(1);
+  expect(
+    await page.evaluate(() => (window as any).mock.assignments[0].profileID),
+  ).toBe("new-profile");
+});
+
+test("vault-key selection has an empty state and cancel preserves profile method", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.goto("/");
+  await page.evaluate(() => {
+    (window as any).mock.vault = { exists: true, locked: false };
+  });
+  await page.getByRole("button", { name: "Editar Alpha", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Editar conexão" });
+  await editor.getByLabel("Autenticação do perfil").selectOption("managed");
+  await expect(editor).toContainText("Nenhuma chave disponível");
+  await editor.getByRole("button", { name: "Voltar ao cadastro" }).click();
+  await expect(editor.getByLabel("Autenticação do perfil")).toHaveValue(
+    "password",
+  );
+  expect(await page.evaluate(() => (window as any).mock.saves.length)).toBe(0);
+});
+
+test("editing metadata can inspect and preserve the inherited vault key", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.addInitScript(() => {
+    const m = (window as any).mock;
+    m.profiles[0].authMethod = "vault";
+    m.vault = { exists: true, locked: false };
+    m.keys = [
+      {
+        id: "key-group",
+        label: "Chave grupo",
+        fingerprint: "SHA256:group-fixture",
+        publicKey: "ssh-ed25519 fixture",
+      },
+    ];
+    m.assignments = [
+      {
+        keyID: "key-group",
+        profileID: "",
+        group: "Laboratório",
+        toGroup: true,
+      },
+    ];
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Editar Alpha", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Editar conexão" });
+  await editor.getByLabel("Autenticação do perfil").selectOption("vault");
+  await editor
+    .getByRole("button", { name: "Consultar ou trocar chave do cofre" })
+    .click();
+  await expect(editor).toContainText(
+    "Associação atual (host ou grupo): Chave grupo",
+  );
+  await editor.getByRole("button", { name: "Manter associação atual" }).click();
+  await editor.getByLabel("Nome", { exact: true }).fill("Alpha renomeado");
+  await editor.getByRole("button", { name: "Salvar conexão" }).click();
+  expect(await page.evaluate(() => (window as any).mock.assignments)).toEqual([
+    { keyID: "key-group", profileID: "", group: "Laboratório", toGroup: true },
+  ]);
+});
+
+test("changed destination requires explicit reassociation and relocks before save", async ({
+  page,
+}) => {
+  await bridge(page);
+  await page.addInitScript(() => {
+    const m = (window as any).mock;
+    m.profiles[0].authMethod = "vault";
+    m.vault = { exists: true, locked: false };
+    m.keys = [
+      {
+        id: "key-group",
+        label: "Chave grupo",
+        fingerprint: "SHA256:group-fixture",
+        publicKey: "ssh-ed25519 fixture",
+      },
+    ];
+    m.assignments = [
+      {
+        keyID: "key-group",
+        profileID: "",
+        group: "Laboratório",
+        toGroup: true,
+      },
+    ];
+  });
+  await page.goto("/");
+  await page.getByRole("button", { name: "Editar Alpha", exact: true }).click();
+  const editor = page.getByRole("dialog", { name: "Editar conexão" });
+  await editor.getByLabel("Host", { exact: true }).fill("changed.invalid");
+  await editor
+    .getByRole("button", { name: "Consultar ou trocar chave do cofre" })
+    .click();
+  await expect(
+    editor.getByRole("button", { name: "Manter associação atual" }),
+  ).toBeDisabled();
+  await expect(editor).toContainText("O destino foi alterado");
+  await editor
+    .getByRole("button", { name: "Usar esta chave no cadastro" })
+    .click();
+  await page.evaluate(() => {
+    (window as any).mock.vault.locked = true;
+  });
+  await editor.getByRole("button", { name: "Salvar conexão" }).click();
+  await expect(
+    editor.getByLabel("Senha mestra", { exact: true }),
+  ).toBeVisible();
+  expect(await page.evaluate(() => (window as any).mock.saves.length)).toBe(0);
+  await editor
+    .getByLabel("Senha mestra", { exact: true })
+    .fill("fixture-master-password");
+  await editor
+    .getByRole("button", { name: "Desbloquear", exact: true })
+    .click();
+  await editor
+    .getByRole("button", { name: "Usar esta chave no cadastro" })
+    .click();
+  await page.setViewportSize({ width: 800, height: 540 });
+  await expect(
+    editor.getByRole("button", { name: "Salvar conexão" }),
+  ).toBeInViewport();
+  await page.screenshot({
+    path: path.resolve(
+      "../docs/evidence/product-ui/profile-vault-key-fixture.png",
+    ),
+  });
+  await editor.getByRole("button", { name: "Salvar conexão" }).click();
+  await expect(editor).not.toBeVisible();
+  expect(await page.evaluate(() => (window as any).mock.assignments)).toEqual([
+    { keyID: "key-group", profileID: "", group: "Laboratório", toGroup: true },
+    { keyID: "key-group", profileID: "a", group: "", toGroup: false },
+  ]);
 });

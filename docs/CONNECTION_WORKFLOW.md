@@ -3,10 +3,16 @@
 O cadastro/edição define o usuário e o método de autenticação:
 
 - **Pedir senha sempre**: padrão para perfis antigos; solicita senha a cada conexão.
-- **Credencial do cofre**: ao abrir o host, tenta conectar com a associação específica ou a chave do grupo. Solicita desbloqueio e, quando habilitado, 2FA. Não contorna a verificação de identidade. Ausência de credencial é um erro explícito, sem fallback silencioso.
-- **Chave privada**: salva somente o caminho local; a passphrase permanece efêmera. Chaves geradas dentro do cofre usam a opção de cofre.
+- Perfis de **cofre**: ao abrir o host, tentam conectar com a associação específica ou a chave do grupo. Solicitam desbloqueio e, quando habilitado, 2FA. Não contornam a verificação de identidade. Ausência de credencial é um erro explícito, sem fallback silencioso.
+- **Chave do cofre — escolher chave**: abre o desbloqueio com senha mestra e 2FA quando habilitado, e lista as chaves geradas por nome e fingerprint. A escolha fica pendente até **Salvar conexão**. Salvar cria/substitui a associação específica do host; não altera o padrão do grupo nem instala a chave pública no servidor.
+- **Arquivo de chave**: salva somente o caminho local; a passphrase permanece efêmera.
+- **Credencial já associada (host ou grupo)**: conserva a resolução existente, inclusive senhas salvas e chaves herdadas do grupo. **Consultar ou trocar chave do cofre** permite conferir nome/fingerprint da chave efetiva após desbloquear. **Manter associação atual**, ou confirmar a mesma chave com o destino inalterado, preserva a herança do grupo e não grava associação específica. Se host/porta/usuário mudou, a tela exige confirmar explicitamente a associação ao novo destino, mesmo quando a chave é a mesma.
 
 O seletor na aba permite uma alteração temporária. Editar o perfil aplica-se a novas abas; abas existentes mantêm sua cópia. Perfis nunca contêm senha, passphrase ou material privado. Campos novos são opcionais no formato v1; versões antigas do aplicativo podem recusar perfis com esses campos e preservam o arquivo.
+
+A escolha de chave não persiste seu ID no perfil: usa a associação criptografada existente no cofre. Editar apenas os metadados mantém essa associação. Se o destino mudar, uma associação antiga continua falhando fechado até ser explicitamente substituída. O seletor informa ausência de chaves e permite nova tentativa em falhas de leitura; retornar ao cadastro antes de confirmar não muda o método.
+
+Metadados do perfil e associação criptografada são arquivos independentes. Se a primeira gravação funcionar e a associação falhar, o editor permanece aberto e informa explicitamente que o perfil foi salvo e a chave não foi associada; a credencial anterior permanece. Tentar salvar novamente reutiliza o ID retornado, sem duplicar o perfil. O aplicativo revalida o desbloqueio antes de salvar, inclusive quando o cofre bloqueou durante a edição. Cancelar/fechar depois de uma falha parcial não desfaz o perfil já salvo.
 
 Para conectar um grupo, use o botão direito no nome do grupo (ou Shift+F10 com foco no grupo). O menu mantém as verificações de cobertura completa de credenciais e de capacidade para 16 sessões. Clique esquerdo continua expandindo/recolhendo.
 

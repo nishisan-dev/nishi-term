@@ -1,12 +1,19 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { createPortal } from "react-dom";
-import { api, type Profile, type Config, type VaultStatus } from "./bridge";
+import {
+  api,
+  type Profile,
+  type Config,
+  type VaultStatus,
+  type KeyInfo,
+} from "./bridge";
 import { TerminalSession, stateLabels, type SessionStatus } from "./session";
 import "@xterm/xterm/css/xterm.css";
 import "./style.css";
 import { FactorInput, TwoFactorSettings } from "./two-factor";
 import { KeyManager, GroupConnect, VaultGate } from "./key-manager";
+import { MetricsPanel } from "./metrics";
 import { FilesPanel } from "./files";
 import { GroupMenu, HostRTT, useLatencies } from "./sidebar-tools";
 import { afterPaint } from "./paint";
@@ -110,6 +117,146 @@ function Modal({
     document.body,
   );
 }
+function ProfileKeyPicker({
+  selected,
+  profileID,
+  onCurrent,
+  onKeep,
+  onSelect,
+  destinationChanged,
+}: {
+  destinationChanged: boolean;
+  selected: string;
+  profileID: string;
+  onCurrent: (key: KeyInfo | null) => void;
+  onKeep: () => void;
+  onSelect: (key: KeyInfo) => void;
+}) {
+  const [keys, setKeys] = useState<KeyInfo[] | null>(null);
+  const [choice, setChoice] = useState(selected);
+  const [error, setError] = useState("");
+  const [reload, setReload] = useState(0);
+  const [current, setCurrent] = useState<KeyInfo | null>(null);
+  const [associationError, setAssociationError] = useState("");
+  useEffect(() => {
+    let alive = true;
+    setError("");
+    setKeys(null);
+    Promise.allSettled([
+      api().ListKeys(),
+      profileID ? api().AssignedKey(profileID) : Promise.resolve(null),
+    ]).then(([listed, assigned]) => {
+      if (!alive) return;
+      const currentKey =
+        assigned.status === "fulfilled" ? assigned.value : null;
+      setCurrent(currentKey);
+      onCurrent(currentKey);
+      setAssociationError(
+        assigned.status === "rejected" ? message(assigned.reason) : "",
+      );
+      if (listed.status === "rejected") {
+        setError(message(listed.reason));
+        return;
+      }
+      setKeys(listed.value);
+      setChoice((id) =>
+        listed.value.some((k) => k.id === id) ? id : currentKey?.id || "",
+      );
+    });
+    return () => {
+      alive = false;
+    };
+  }, [reload, profileID, onCurrent]);
+  const key = keys?.find((k) => k.id === choice);
+  return (
+    <div>
+      <p>
+        Escolha uma chave gerada no cofre. O material privado permanece no
+        cofre.
+      </p>
+      {current && (
+        <div>
+          <p>
+            Associação atual (host ou grupo): <strong>{current.label}</strong>
+          </p>
+          <code className="fingerprint">{current.fingerprint}</code>
+          <button
+            type="button"
+            className="secondary"
+            onClick={onKeep}
+            disabled={destinationChanged}
+          >
+            Manter associação atual
+          </button>
+        </div>
+      )}
+      {destinationChanged && (
+        <p className="hint">
+          O destino foi alterado (host, porta, usuário ou grupo). Confirme a
+          chave para criar uma associação explícita ao perfil atualizado; a
+          associação antiga não será reutilizada automaticamente.
+        </p>
+      )}
+      {associationError && (
+        <p role="alert" className="error">
+          Não foi possível consultar a associação atual: {associationError}.
+          Selecionar uma chave e salvar cria uma nova associação específica para
+          este destino.
+        </p>
+      )}
+      {error ? (
+        <>
+          <p role="alert" className="error">
+            {error}
+          </p>
+          <button type="button" onClick={() => setReload((n) => n + 1)}>
+            Tentar novamente
+          </button>
+        </>
+      ) : keys === null ? (
+        <p>Carregando chaves…</p>
+      ) : keys.length === 0 ? (
+        <p>
+          Nenhuma chave disponível. Volte e abra Chaves SSH na lateral para
+          gerar uma chave.
+        </p>
+      ) : (
+        <>
+          <label>
+            Chave do cofre
+            <select
+              aria-label="Chave do cofre"
+              value={choice}
+              onChange={(e) => setChoice(e.target.value)}
+            >
+              <option value="">Selecione uma chave</option>
+              {keys.map((k) => (
+                <option key={k.id} value={k.id}>
+                  {k.label}
+                </option>
+              ))}
+            </select>
+          </label>
+          {key && <code className="fingerprint">{key.fingerprint}</code>}
+          <div className="modal-actions">
+            <button
+              type="button"
+              disabled={!key}
+              onClick={() =>
+                key &&
+                (key.id === current?.id && !destinationChanged
+                  ? onKeep()
+                  : onSelect(key))
+              }
+            >
+              Usar esta chave no cadastro
+            </button>
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
 function ProfileEditor({
   profile,
   groups,
@@ -124,6 +271,10 @@ function ProfileEditor({
   const [draft, setDraft] = useState({ ...profile }),
     [saving, setSaving] = useState(false),
     [error, setError] = useState("");
+  const [selectedKey, setSelectedKey] = useState<KeyInfo | null>(null);
+  const [currentKey, setCurrentKey] = useState<KeyInfo | null>(null);
+  const [choosingKey, setChoosingKey] = useState(false);
+  const [savedID, setSavedID] = useState(profile.id);
   const field = (key: keyof Profile, value: string | number) =>
     setDraft((p) => ({ ...p, [key]: value }));
   async function save(e: React.FormEvent) {
@@ -132,8 +283,35 @@ function ProfileEditor({
     setSaving(true);
     setError("");
     try {
-      const profiles = await api().SaveProfile(draft);
+      if (selectedKey) {
+        const status = await api().VaultStatus();
+        if (!status.exists || status.locked) {
+          setChoosingKey(true);
+          return;
+        }
+      }
+      const profiles = await api().SaveProfile({ ...draft, id: savedID });
+      // New profiles are appended by Store.Save; retain the returned ID before
+      // attempting the independent encrypted-vault write, so retries cannot duplicate.
+      const saved = savedID
+        ? profiles.find((p) => p.id === savedID)
+        : profiles.at(-1);
       onSaved(profiles);
+      if (selectedKey) {
+        if (!saved)
+          throw new Error(
+            "Perfil salvo, mas não foi possível identificar a conexão. Reabra o cadastro para associar a chave.",
+          );
+        setSavedID(saved.id);
+        setDraft(saved);
+        try {
+          await api().AssignKey(selectedKey.id, saved.id, "", false);
+        } catch (e) {
+          throw new Error(
+            `Os dados da conexão foram salvos, mas a chave não foi associada. A credencial anterior foi preservada. Tente salvar novamente: ${message(e)}`,
+          );
+        }
+      }
       onClose();
     } catch (e) {
       setError(message(e));
@@ -148,146 +326,242 @@ function ProfileEditor({
         if (!saving) onClose();
       }}
     >
-      <form onSubmit={save}>
-        <p className="muted">
-          Defina o destino e como esta conexão deve autenticar.
-        </p>
-        <fieldset disabled={saving} className="form-grid">
-          <label>
-            Nome
-            <input
-              autoFocus
-              required
-              maxLength={100}
-              value={draft.name}
-              onChange={(e) => field("name", e.target.value)}
-              placeholder="Nome da conexão"
-            />
-          </label>
-          <label>
-            Grupo
-            <input
-              maxLength={100}
-              list="profile-groups"
-              value={draft.group}
-              onChange={(e) => field("group", e.target.value)}
-              placeholder="Sem grupo"
-            />
-            <datalist id="profile-groups">
-              {groups.map((g) => (
-                <option key={g} value={g} />
-              ))}
-            </datalist>
-          </label>
-          <label className="host-field">
-            Host
-            <input
-              required
-              maxLength={253}
-              value={draft.host}
-              onChange={(e) => field("host", e.target.value)}
-              placeholder="Endereço IP ou domínio"
-              autoComplete="off"
-            />
-          </label>
-          <label>
-            Porta
-            <input
-              required
-              type="number"
-              min={1}
-              max={65535}
-              value={draft.port}
-              onChange={(e) => field("port", Number(e.target.value))}
-            />
-          </label>
-          <label className="wide">
-            Usuário
-            <input
-              required
-              maxLength={256}
-              value={draft.user}
-              onChange={(e) => field("user", e.target.value)}
-              autoComplete="off"
-            />
-          </label>
-          <label className="wide">
-            Autenticação do perfil
-            <select
-              value={draft.authMethod || "password"}
-              onChange={(e) =>
+      {choosingKey ? (
+        <>
+          <VaultGate>
+            <ProfileKeyPicker
+              selected={selectedKey?.id || ""}
+              profileID={savedID}
+              destinationChanged={
+                draft.host.trim() !== profile.host ||
+                draft.port !== profile.port ||
+                draft.user.trim() !== profile.user ||
+                draft.group.trim() !== profile.group
+              }
+              onCurrent={setCurrentKey}
+              onKeep={() => {
+                setSelectedKey(null);
                 setDraft((p) => ({
                   ...p,
-                  authMethod: e.target.value as "password" | "key" | "vault",
-                  privateKeyPath:
-                    e.target.value === "key" ? p.privateKeyPath || "" : "",
-                }))
-              }
+                  authMethod: "vault",
+                  privateKeyPath: "",
+                }));
+                setChoosingKey(false);
+              }}
+              onSelect={(key) => {
+                setSelectedKey(key);
+                setDraft((p) => ({
+                  ...p,
+                  authMethod: "vault",
+                  privateKeyPath: "",
+                }));
+                setChoosingKey(false);
+              }}
+            />
+          </VaultGate>
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="secondary"
+              onClick={() => setChoosingKey(false)}
             >
-              <option value="password">Pedir senha sempre</option>
-              <option value="vault">Credencial do cofre</option>
-              <option value="key">Chave privada</option>
-            </select>
-          </label>
-          {draft.authMethod === "key" && (
-            <label className="wide">
-              Caminho da chave privada
+              Voltar ao cadastro
+            </button>
+          </div>
+        </>
+      ) : (
+        <form className="profile-editor" onSubmit={save}>
+          <p className="muted">
+            Defina o destino e como esta conexão deve autenticar.
+          </p>
+          <fieldset disabled={saving} className="form-grid">
+            <label>
+              Nome
+              <input
+                autoFocus
+                required
+                maxLength={100}
+                value={draft.name}
+                onChange={(e) => field("name", e.target.value)}
+                placeholder="Nome da conexão"
+              />
+            </label>
+            <label>
+              Grupo
+              <input
+                maxLength={100}
+                list="profile-groups"
+                value={draft.group}
+                onChange={(e) => field("group", e.target.value)}
+                placeholder="Sem grupo"
+              />
+              <datalist id="profile-groups">
+                {groups.map((g) => (
+                  <option key={g} value={g} />
+                ))}
+              </datalist>
+            </label>
+            <label className="host-field">
+              Host
               <input
                 required
-                maxLength={4096}
-                value={draft.privateKeyPath || ""}
-                onChange={(e) => field("privateKeyPath", e.target.value)}
-                placeholder="Caminho completo no computador"
+                maxLength={253}
+                value={draft.host}
+                onChange={(e) => field("host", e.target.value)}
+                placeholder="Endereço IP ou domínio"
+                autoComplete="off"
               />
             </label>
-          )}
-          <p className="hint wide">
-            {draft.authMethod === "vault"
-              ? "Ao abrir, usaremos a credencial associada ao host ou ao grupo. Se o cofre estiver trancado, pediremos seu desbloqueio."
-              : draft.authMethod === "key"
-                ? "Somente o caminho será salvo. A passphrase, se houver, será pedida ao conectar."
-                : "O usuário fica salvo. A senha será pedida a cada conexão."}
-          </p>
-          <details className="wide" open={draft.knownHosts !== "" || undefined}>
-            <summary>Opções avançadas de identidade</summary>
             <label>
-              Arquivo known_hosts (opcional)
+              Porta
               <input
-                maxLength={4096}
-                value={draft.knownHosts}
-                onChange={(e) => field("knownHosts", e.target.value)}
-                placeholder="Vazio: gerenciado pelo NishiTerm"
+                required
+                type="number"
+                min={1}
+                max={65535}
+                value={draft.port}
+                onChange={(e) => field("port", Number(e.target.value))}
               />
             </label>
-            <p className="hint">
-              Um arquivo externo usa verificação estrita e não permite confirmar
-              identidades desconhecidas pela interface.
+            <label className="wide">
+              Usuário
+              <input
+                required
+                maxLength={256}
+                value={draft.user}
+                onChange={(e) => field("user", e.target.value)}
+                autoComplete="off"
+              />
+            </label>
+            <label className="wide">
+              Autenticação do perfil
+              <select
+                value={selectedKey ? "managed" : draft.authMethod || "password"}
+                onChange={(e) => {
+                  if (e.target.value === "managed") {
+                    setChoosingKey(true);
+                    return;
+                  }
+                  setSelectedKey(null);
+                  setDraft((p) => ({
+                    ...p,
+                    authMethod: e.target.value as "password" | "key" | "vault",
+                    privateKeyPath:
+                      e.target.value === "key" ? p.privateKeyPath || "" : "",
+                  }));
+                }}
+              >
+                <option value="password">Pedir senha sempre</option>
+                <option value="managed">Chave do cofre — escolher chave</option>
+                <option value="key">Arquivo de chave</option>
+                <option value="vault">
+                  Credencial já associada (host ou grupo)
+                </option>
+              </select>
+            </label>
+            {draft.authMethod === "vault" && !selectedKey && (
+              <div className="wide">
+                {currentKey && (
+                  <>
+                    <strong>{currentKey.label}</strong>
+                    <code className="fingerprint">
+                      {currentKey.fingerprint}
+                    </code>
+                  </>
+                )}
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setChoosingKey(true)}
+                >
+                  Consultar ou trocar chave do cofre
+                </button>
+                <p className="hint">
+                  Editar os dados do perfil não altera a associação existente.
+                </p>
+              </div>
+            )}
+            {selectedKey && (
+              <div className="wide">
+                <strong>{selectedKey.label}</strong>
+                <code className="fingerprint">{selectedKey.fingerprint}</code>
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => setChoosingKey(true)}
+                >
+                  Trocar chave do cofre
+                </button>
+                <p className="hint">
+                  Ao salvar, esta chave substituirá a credencial específica
+                  deste host. A chave pública precisa estar autorizada no
+                  servidor. O padrão do grupo permanece igual.
+                </p>
+              </div>
+            )}
+            {draft.authMethod === "key" && (
+              <label className="wide">
+                Caminho da chave privada
+                <input
+                  required
+                  maxLength={4096}
+                  value={draft.privateKeyPath || ""}
+                  onChange={(e) => field("privateKeyPath", e.target.value)}
+                  placeholder="Caminho completo no computador"
+                />
+              </label>
+            )}
+            <p className="hint wide">
+              {draft.authMethod === "vault"
+                ? "Ao abrir, usaremos a credencial associada ao host ou ao grupo. Se o cofre estiver trancado, pediremos seu desbloqueio."
+                : draft.authMethod === "key"
+                  ? "Somente o caminho será salvo. A passphrase, se houver, será pedida ao conectar."
+                  : "O usuário fica salvo. A senha será pedida a cada conexão."}
             </p>
-          </details>
-        </fieldset>
-        <p className="hint">
-          Na primeira conexão, confirme a impressão digital do servidor.
-          Mudanças posteriores serão bloqueadas.
-        </p>
-        {error && (
-          <p role="alert" className="error">
-            {error}
+            <details
+              className="wide"
+              open={draft.knownHosts !== "" || undefined}
+            >
+              <summary>Opções avançadas de identidade</summary>
+              <label>
+                Arquivo known_hosts (opcional)
+                <input
+                  maxLength={4096}
+                  value={draft.knownHosts}
+                  onChange={(e) => field("knownHosts", e.target.value)}
+                  placeholder="Vazio: gerenciado pelo NishiTerm"
+                />
+              </label>
+              <p className="hint">
+                Um arquivo externo usa verificação estrita e não permite
+                confirmar identidades desconhecidas pela interface.
+              </p>
+            </details>
+          </fieldset>
+          <p className="hint">
+            Na primeira conexão, confirme a impressão digital do servidor.
+            Mudanças posteriores serão bloqueadas.
           </p>
-        )}
-        <div className="modal-actions">
-          <button
-            type="button"
-            className="secondary"
-            onClick={onClose}
-            disabled={saving}
-          >
-            Cancelar
-          </button>
-          <button disabled={saving}>
-            {saving ? "Salvando…" : "Salvar conexão"}
-          </button>
-        </div>
-      </form>
+          {error && (
+            <p role="alert" className="error">
+              {error}
+            </p>
+          )}
+          <div className="modal-actions">
+            <button
+              type="button"
+              className="secondary"
+              onClick={onClose}
+              disabled={saving}
+            >
+              Cancelar
+            </button>
+            <button disabled={saving}>
+              {saving ? "Salvando…" : "Salvar conexão"}
+            </button>
+          </div>
+        </form>
+      )}
     </Modal>
   );
 }
@@ -483,6 +757,7 @@ function SessionPane({
   );
   const [status, setStatus] = useState(initialStatus);
   const [showFiles, setShowFiles] = useState(false);
+  const [showMetrics, setShowMetrics] = useState(false);
   const [unlockForConnection, setUnlockForConnection] = useState(false);
   const [unlockBusy, setUnlockBusy] = useState(false);
   const [unlockError, setUnlockError] = useState("");
@@ -641,7 +916,7 @@ function SessionPane({
   }
   return (
     <section
-      className="session-pane"
+      className={`session-pane ${showMetrics && status.state === "open" ? "with-metrics" : ""}`}
       role="tabpanel"
       id={`panel-${tab.id}`}
       aria-labelledby={`tab-${tab.id}`}
@@ -756,6 +1031,14 @@ function SessionPane({
           onClick={() => setShowFiles(!showFiles)}
         >
           SFTP
+        </button>
+        <button
+          className="secondary compact"
+          disabled={status.state !== "open"}
+          aria-pressed={showMetrics}
+          onClick={() => setShowMetrics(!showMetrics)}
+        >
+          Métricas
         </button>
         {busy && (
           <button
@@ -901,6 +1184,14 @@ function SessionPane({
         </div>
       )}
       <div className="terminal" ref={mount} />
+      {showMetrics && status.state === "open" && status.sessionId && (
+        <MetricsPanel
+          key={status.sessionId}
+          id={status.sessionId}
+          active={visible}
+          onClose={() => setShowMetrics(false)}
+        />
+      )}
       {showFiles && visible && status.state === "open" && status.sessionId && (
         <FilesPanel
           key={status.sessionId}

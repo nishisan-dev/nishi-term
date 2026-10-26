@@ -78,3 +78,7 @@ Gerador Ed25519 protegido pelo cofre, chave privada somente no backend, associa�
 2FA TOTP opcional, cadastro local confirmado, códigos de recuperação e desbloqueio validado no backend. Limitações offline, formato v2, recuperação e testes: [VAULT_2FA.md](VAULT_2FA.md).
 
 `internal/latency` mantém cache efêmero de RTT com ciclo de 10 s, até 32 workers/200 destinos e timeout de 1 s incluindo DNS. Adaptadores ICMP específicos para Linux/Windows não exigem elevação; startup/shutdown do aplicativo controlam o contexto. Bridge consulta snapshots, sem eventos ou filas ilimitadas. Preferência de autenticação permanece metadado em `internal/profiles`; segredos continuam exclusivos do cofre/DTO transitório.
+
+## Observabilidade
+
+`internal/observability` interpreta snapshots Linux limitados e calcula taxas. `sshengine.Metrics` abre canal exec no transporte verificado, separado de terminal e SFTP, com exclusão por sessão, timeout e limite de stdout. Canal-open bloqueado retém um único worker até resolução/fechamento do transporte; não fecha terminal para interromper métricas. `MetricsPanel` faz pull quando visível e mantém histórico limitado, sem eventos nem persistência. Ver [OBSERVABILITY.md](OBSERVABILITY.md).
