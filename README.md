@@ -1,6 +1,15 @@
 # NishiTerm
 
-Cliente de terminal SSH desktop em desenvolvimento em Go + Wails v2 estável + React + xterm.js. O projeto está na fase de especificação e validação técnica; não é um cliente SSH pronto para distribuição.
+Cliente de terminal SSH desktop em desenvolvimento em Go + Wails v2 estável + React + xterm.js. O projeto está na fase de especificação e validação técnica; os downloads são builds de desenvolvimento para avaliação, ainda sem certificação de estabilidade.
+
+## Downloads — latest
+
+- [Windows x64 (ZIP)](https://github.com/nishisan-dev/nishi-term/releases/latest/download/NishiTerm-windows-amd64.zip)
+- [Linux x64 (tar.gz)](https://github.com/nishisan-dev/nishi-term/releases/latest/download/NishiTerm-linux-amd64.tar.gz)
+- [Checksums SHA-256](https://github.com/nishisan-dev/nishi-term/releases/latest/download/SHA256SUMS)
+- [Release e evidências do build](https://github.com/nishisan-dev/nishi-term/releases/latest)
+
+Os links acompanham o último build aprovado de `main`. Pacotes sem assinatura digital, destinados à avaliação. Windows requer WebView2; Linux requer GTK3/WebKitGTK 4.1. Extraia o pacote antes de executar. A validação nativa da interface atual no Windows permanece pendente. Somente amd64 (x64) é distribuído; ARM64 ainda não é suportado pelo pipeline. Veja [instruções e política de releases](docs/CI.md).
 
 ## Documentação
 

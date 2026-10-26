@@ -94,3 +94,60 @@ jobs:
           path: NishiTerm-${{ matrix.target }}-amd64.tar.gz
           if-no-files-found: error
           retention-days: 14
+  release:
+    name: Publish latest downloads
+    needs: [go-tests, frontend, build]
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    runs-on: ubuntu-22.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+    steps:
+      - name: Download packages from this run
+        run: |
+          gh run download "$GITHUB_RUN_ID" --name NishiTerm-windows-amd64 --dir downloads/windows
+          gh run download "$GITHUB_RUN_ID" --name NishiTerm-linux-amd64 --dir downloads/linux
+      - name: Verify packages and prepare release assets
+        run: |
+          set -euo pipefail
+          mkdir -p release
+          for target in windows linux; do
+            archive="NishiTerm-${target}-amd64.tar.gz"
+            mkdir -p "unpacked/$target"
+            tar -xzf "downloads/$target/$archive" -C "unpacked/$target"
+            (cd "unpacked/$target" && sha256sum --check SHA256SUMS)
+            cp "downloads/$target/$archive" release/
+          done
+          test -s unpacked/windows/NishiTerm.exe
+          test -x unpacked/linux/NishiTerm
+          (cd unpacked/windows && zip ../../release/NishiTerm-windows-amd64.zip NishiTerm.exe LICENSE NOTICE README.md SHA256SUMS)
+          (cd release && sha256sum NishiTerm-* > SHA256SUMS && sha256sum --check SHA256SUMS)
+      - name: Publish complete release as latest
+        run: |
+          set -euo pipefail
+          current_main="$(gh api "repos/$GH_REPO/git/ref/heads/main" --jq '.object.sha')"
+          if [ "$current_main" != "$GITHUB_SHA" ]; then
+            echo 'Main avançou; esta execução não atualizará latest.' >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          tag="build-${GITHUB_RUN_NUMBER}-${GITHUB_RUN_ATTEMPT}"
+          cat > release-notes.md <<EOF
+          Build de desenvolvimento para avaliação, sem assinatura digital. Não é uma certificação de estabilidade.
+
+          - Windows x64: baixe NishiTerm-windows-amd64.zip, extraia e execute NishiTerm.exe como usuário comum. Requer WebView2 disponível; não instala runtime nem pede elevação.
+          - Linux x64: baixe NishiTerm-linux-amd64.tar.gz e extraia. Requer GTK3 e WebKitGTK 4.1; compilado no Ubuntu 22.04.
+          - SHA256SUMS verifica os pacotes; cada pacote também contém o checksum do binário, LICENSE e NOTICE.
+          - Testes Go com race detector em Linux/Windows, testes Chromium e ambos os builds passaram. Testes de interface usam bridge simulado; validação da interface nativa atual no Windows continua pendente.
+
+          Commit: $GITHUB_SHA
+          Evidências: https://github.com/$GH_REPO/actions/runs/$GITHUB_RUN_ID
+          EOF
+          # gh creates a draft, uploads all assets, then publishes it as latest.
+          gh release create "$tag" release/* --target "$GITHUB_SHA" \
+            --title "NishiTerm build ${GITHUB_RUN_NUMBER}.${GITHUB_RUN_ATTEMPT}" \
+            --notes-file release-notes.md --latest
+          echo "Downloads: https://github.com/$GH_REPO/releases/latest" >> "$GITHUB_STEP_SUMMARY"
